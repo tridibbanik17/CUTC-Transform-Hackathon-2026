@@ -2,18 +2,19 @@
 
 ## Introduction
 
-A browser extension that integrates a Retrieval-Augmented Generation (RAG) AI agent into university learning management systems (LMS). The extension indexes course materials (lecture slides, assignments, past exams, announcements) on the fly and provides students with concise, accurate answers to their questions — each paired with direct links back to the exact source document for instant verification. The system prioritizes accuracy over breadth to avoid misinformation, and is designed to be completely free, scalable, and easy to use. The extension leverages Google's Gemini API free tier for both embedding generation and answer synthesis, with a multi-model fallback chain to handle rate limits gracefully. The architecture uses a pluggable platform adapter pattern so that multiple LMS platforms can be supported — shipping first with D2L Brightspace, with Canvas, Moodle, and Google Classroom adapters to follow.
+A browser extension that integrates a Retrieval-Augmented Generation (RAG) AI agent into university learning management systems (LMS). The extension detects and extracts course materials (lecture slides, assignments, past exams, announcements) from LMS pages and sends them to the Backboard.io backend for document chunking, vector storage, and retrieval-augmented generation. Students receive concise, accurate answers to their questions — each paired with direct links back to the exact source document for instant verification. The system prioritizes accuracy over breadth to avoid misinformation. Users provide their own Google Gemini API key (BYOK model) targeting Google AI Studio free tier models, achieving $0 compute cost. The Backboard.io API manages state, conversational memory, and RAG orchestration server-side. The architecture uses a pluggable platform adapter pattern so that multiple LMS platforms can be supported — shipping first with D2L Brightspace, with Canvas, Moodle, and Google Classroom adapters to follow.
 
 ## Glossary
 
-- **Extension**: The browser extension application installed by the user in Chrome or Firefox
-- **RAG_Engine**: The Retrieval-Augmented Generation backend that processes queries by retrieving relevant document chunks and generating answers using a large language model
-- **Document_Indexer**: The component responsible for extracting, chunking, and embedding course materials into a searchable vector store
+- **Extension**: The browser extension application (Chrome, Manifest V3) handling UI, local document selection, and secure local storage of user credentials
+- **RAG_Engine**: The Backboard.io-powered backend that processes queries by retrieving relevant document chunks from the vector store and generating answers using the user's Gemini API key
+- **Document_Indexer**: The Backboard.io component responsible for chunking and embedding course materials into a searchable vector store
 - **Query_Interface**: The UI panel within the extension where students type questions and receive answers
 - **Source_Citation**: A reference linking an answer back to the specific document, page, or section from which the information was retrieved
-- **Vector_Store**: The database storing document embeddings for semantic similarity search
+- **Vector_Store**: The Backboard.io-managed database storing document embeddings for semantic similarity search
 - **Confidence_Score**: A numerical indicator (0.0 to 1.0) representing how well retrieved documents match a query
-- **Course_Context**: The set of all indexed materials belonging to a specific course
+- **Course_Context**: The set of all indexed materials belonging to a specific course, managed server-side by Backboard.io
+- **Backboard_API**: The Backboard.io API managing state, conversational memory, document chunking, vector storage, and retrieval-augmented generation (RAG) server-side
 - **D2L_Brightspace**: The learning management system (LMS) used by McMaster University and many Ontario institutions, also known as Avenue to Learn
 - **Canvas**: The LMS used by University of Toronto (Quercus), UBC, and many US universities
 - **Moodle**: The open-source LMS used by York University (eClass) and many international institutions
@@ -22,8 +23,9 @@ A browser extension that integrates a Retrieval-Augmented Generation (RAG) AI ag
 - **Content_Scraper**: The component that extracts course materials from LMS pages via the active Platform_Adapter
 - **OCR_Engine**: The Optical Character Recognition component that converts scanned or handwritten text within images and PDFs into machine-readable text
 - **Vision_Model**: An AI model capable of interpreting visual content (diagrams, charts, figures) and producing natural language descriptions of their meaning
-- **Gemini_API**: Google's generative AI API providing free-tier access to embedding generation (gemini-embedding-2) and language model inference (gemini-2.5-flash, gemini-3.5-flash-lite, gemini-2.5-flash-lite) used by the extension at zero cost to the user
-- **Model_Fallback_Chain**: The ordered sequence of Gemini models the extension attempts when a model returns an HTTP 429 rate limit error, ensuring continued service by failing over to alternate models with independent quota pools
+- **Gemini_API**: Google's generative AI API accessed via the user's personal API key (BYOK model), targeting free-tier models for embedding generation and language model inference at $0 compute cost
+- **BYOK**: Bring Your Own Key — the model where each user provides their personal Google Gemini API key generated via Google AI Studio, stored securely in the extension's local storage
+- **Model_Fallback_Chain**: The ordered sequence of Gemini models (`gemini-3.6-flash` → `gemini-3.5-flash-lite` → `gemini-2.5-flash-lite`) the extension attempts when a model returns HTTP 429 (rate limit) or HTTP 404 (deprecated endpoint), ensuring continued service by failing over to alternate models with independent quota pools
 
 ## Requirements
 
@@ -61,8 +63,8 @@ A browser extension that integrates a Retrieval-Augmented Generation (RAG) AI ag
 
 #### Acceptance Criteria
 
-1. WHEN the Content_Scraper delivers extracted text, THE Document_Indexer SHALL split the text into chunks between 200 and 1000 tokens each, preserving sentence boundaries so that no sentence is split across two chunks
-2. WHEN chunks are created, THE Document_Indexer SHALL generate vector embeddings and store them in the Vector_Store along with source metadata including the source file name, page number, and section heading; IF embedding generation fails for a chunk, THEN THE Document_Indexer SHALL NOT store the metadata for that chunk and SHALL report the failure in the indexing summary
+1. WHEN the Content_Scraper delivers extracted text, THE Backboard_API SHALL split the text into chunks between 200 and 1000 tokens each, preserving sentence boundaries so that no sentence is split across two chunks
+2. WHEN chunks are created, THE Backboard_API SHALL generate vector embeddings using the user's Gemini API key and store them in the Vector_Store along with source metadata including the source file name, page number, and section heading; IF embedding generation fails for a chunk, THEN THE Backboard_API SHALL NOT store the metadata for that chunk and SHALL report the failure in the indexing summary
 3. WHILE indexing is in progress, THE Extension SHALL display a progress indicator showing the percentage of documents indexed and update the indicator after each document completes
 4. IF any indexing-related component (Document_Indexer, Vector_Store, or embedding service) encounters an error during processing, THEN THE Extension SHALL skip the problematic content, continue indexing remaining documents, and display a notification to the user identifying the skipped content by file name and the component that failed; THE Extension SHALL only display error notifications when actual errors have occurred
 5. WHEN indexing of all delivered documents completes successfully, THE Extension SHALL update the course indexing status to "indexed" and display a summary indicating the total number of documents and chunks indexed
@@ -140,12 +142,15 @@ A browser extension that integrates a Retrieval-Augmented Generation (RAG) AI ag
 
 #### Acceptance Criteria
 
-1. WHEN a user installs the Extension for the first time, THE Extension SHALL display an onboarding guide explaining its core functionality in three steps or fewer, with each step containing no more than one illustration and two sentences of text
-2. THE Extension SHALL function without requiring the user to create an account, provide API keys, or pay any fees; all AI inference SHALL use the Gemini API free tier
-3. WHEN the user navigates to a supported LMS course page for the first time with the Extension installed, THE Extension SHALL prompt the user to begin indexing the course materials
-4. THE Extension SHALL provide a single-click action to begin indexing all available materials for the current course
-5. WHEN the user dismisses the onboarding guide or the indexing prompt, THE Extension SHALL not display that same prompt again on subsequent visits, and SHALL persist this dismissal state across browser sessions; THE Extension SHALL only track dismissal state for prompts that were fully displayed to the user and where the display flag confirms the prompt was shown
-6. THE Extension SHALL provide an accessible option within the Extension panel to manually initiate indexing for any unindexed course, regardless of whether the indexing prompt was previously shown or dismissed
+1. WHEN a user installs the Extension for the first time, THE Extension SHALL display an onboarding guide explaining its core functionality (including the one-time API key setup) in four steps or fewer, with each step containing no more than one illustration and two sentences of text
+2. THE Extension SHALL require the user to provide a valid Google Gemini API key (generated via Google AI Studio) during onboarding before indexing or querying can be used; THE Extension SHALL provide clear instructions linking to Google AI Studio for key generation
+3. WHEN the user enters an API key during setup, THE Extension SHALL validate the key by making a lightweight test request to the Gemini API; IF validation succeeds, THE Extension SHALL store the key securely in the browser's local storage and proceed to the main interface; IF validation fails, THE Extension SHALL display an error indicating the key is invalid and prompt the user to re-enter it
+4. THE Extension SHALL store the API key only in the browser's local storage on the user's device and SHALL NOT transmit the key to any server other than the Gemini API endpoints and the Backboard.io backend (which uses it to authenticate Gemini requests on behalf of the user)
+5. WHEN the user navigates to a supported LMS course page for the first time with the Extension installed and a valid API key configured, THE Extension SHALL prompt the user to begin indexing the course materials
+6. THE Extension SHALL provide a single-click action to begin indexing all available materials for the current course
+7. WHEN the user dismisses the onboarding guide or the indexing prompt, THE Extension SHALL not display that same prompt again on subsequent visits, and SHALL persist this dismissal state across browser sessions; THE Extension SHALL only track dismissal state for prompts that were fully displayed to the user and where the display flag confirms the prompt was shown
+8. THE Extension SHALL provide an accessible option within the Extension panel to manually initiate indexing for any unindexed course, regardless of whether the indexing prompt was previously shown or dismissed
+9. THE Extension SHALL provide a settings area within the side panel where the user can view (masked), update, or remove their stored API key
 
 ### Requirement 10: Performance and Scalability
 
@@ -153,12 +158,10 @@ A browser extension that integrates a Retrieval-Augmented Generation (RAG) AI ag
 
 #### Acceptance Criteria
 
-1. THE Document_Indexer SHALL process a typical course's materials (up to 50 documents totalling 500 pages) within 5 minutes
+1. THE Backboard_API SHALL process a typical course's materials (up to 50 documents totalling 500 pages) within 5 minutes of receiving the extracted content from the Extension
 2. WHILE 10 courses are simultaneously indexed in the Vector_Store, THE RAG_Engine SHALL return query results within the same 10-second threshold as when a single course is indexed
 3. WHEN the user queries an indexed course containing up to 500 documents, THE RAG_Engine SHALL return results within 10 seconds
-4. THE Extension SHALL consume less than 200MB of local browser storage per indexed course
-5. IF an indexed course's storage consumption reaches the 200MB limit, THEN THE Extension SHALL prevent further indexing for that course and display a notification indicating the storage limit has been reached
-6. IF the Document_Indexer fails or times out during processing, THEN THE Document_Indexer SHALL preserve any documents already indexed in that session and display a notification indicating the indexing was incomplete with the count of successfully indexed documents
+4. IF the Backboard_API fails or times out during processing, THEN THE Extension SHALL preserve any documents already indexed in that session and display a notification indicating the indexing was incomplete with the count of successfully indexed documents
 
 ### Requirement 11: Privacy and Data Handling
 
@@ -166,13 +169,13 @@ A browser extension that integrates a Retrieval-Augmented Generation (RAG) AI ag
 
 #### Acceptance Criteria
 
-1. THE Extension SHALL store indexed course data locally on the user's device
-2. THE Extension SHALL not transmit raw course document content to external servers beyond what is required for embedding generation and LLM inference
-3. WHEN sending content to external AI services for processing, THE Extension SHALL transmit only individual text chunks not exceeding the size defined by the Document_Indexer chunking configuration, SHALL not transmit entire documents in a single request, and SHALL NOT transmit empty or zero-sized chunks that provide no meaningful content for processing
-4. THE Extension SHALL not store or log user queries on any external server beyond 30 seconds after the response has been returned to the user; natural expiration through cache mechanisms is acceptable to satisfy this requirement
-5. WHEN the Extension transmits data to the Gemini API for the first time in a session, THE Extension SHALL display a notice informing the user that content will be sent to Google's servers for AI processing
-6. THE Extension SHALL provide a user-accessible action to delete all locally stored indexed course data for a given Course_Context
-7. IF a request to an external AI service fails or times out, THEN THE Extension SHALL not retry transmission of the same content more than 2 additional times; IF all retry attempts are exhausted, THEN THE Extension SHALL display an error message to the user only if the user is still in the relevant interface context, and abandon the request
+1. THE Extension SHALL store the user's Gemini API key securely in the browser's local storage and SHALL NOT expose it in any user-visible log, network request header visible to third parties, or extension page source
+2. THE Extension SHALL transmit extracted course document chunks to the Backboard_API for processing; all data SHALL be associated with the user's isolated API credentials ensuring tenant separation
+3. WHEN sending content to the Backboard_API for processing, THE Extension SHALL transmit only individual text chunks not exceeding the size defined by the Document_Indexer chunking configuration, SHALL not transmit entire documents in a single request, and SHALL NOT transmit empty or zero-sized chunks that provide no meaningful content for processing
+4. THE Backboard_API SHALL process and store course chunks and state vectors securely using the user's isolated API credentials; raw course content SHALL NOT be accessible to other users of the platform
+5. WHEN the Extension transmits data to the Backboard_API or Gemini API for the first time in a session, THE Extension SHALL display a notice informing the user that content will be sent to external servers for processing
+6. THE Extension SHALL provide a user-accessible action to request deletion of all indexed course data for a given Course_Context from the Backboard_API
+7. IF a request to the Backboard_API or Gemini API fails or times out, THEN THE Extension SHALL not retry transmission of the same content more than 2 additional times; IF all retry attempts are exhausted, THEN THE Extension SHALL display an error message to the user only if the user is still in the relevant interface context, and abandon the request
 
 ### Requirement 12: LMS Platform Abstraction
 
@@ -190,16 +193,16 @@ A browser extension that integrates a Retrieval-Augmented Generation (RAG) AI ag
 
 ### Requirement 13: AI Model Fallback and Rate Limit Handling
 
-**User Story:** As a student, I want the extension to work reliably even during peak usage times, so that I am never blocked from getting answers due to API rate limits.
+**User Story:** As a student, I want the extension to work reliably even during peak usage times, so that I am never blocked from getting answers due to API rate limits or deprecated model endpoints.
 
 #### Acceptance Criteria
 
-1. THE Extension SHALL use the Gemini API free tier for all AI inference (embedding generation and answer synthesis) and SHALL NOT require the user to pay for API usage
-2. THE Extension SHALL use `gemini-embedding-2` as the embedding model for generating vector embeddings of document chunks and query embeddings
-3. THE Extension SHALL use `gemini-2.5-flash` as the primary model for answer generation and vision/OCR processing
-4. WHEN the primary model (`gemini-2.5-flash`) returns an HTTP 429 rate limit response, THE Extension SHALL automatically retry the request using the first fallback model (`gemini-3.5-flash-lite`)
-5. WHEN the first fallback model (`gemini-3.5-flash-lite`) also returns an HTTP 429 rate limit response, THE Extension SHALL automatically retry the request using the second fallback model (`gemini-2.5-flash-lite`)
-6. WHEN all models in the fallback chain return HTTP 429 rate limit responses, THE Extension SHALL halt automated retries, display a notification informing the user that the free daily API limit has been reached, and preserve local search functionality against already-indexed vector data so the user can still browse previously retrieved answers
-7. THE Extension SHALL implement the fallback chain transparently to the user — the user SHALL NOT need to select or configure models manually
-8. WHEN a model in the fallback chain returns an error other than HTTP 429 (e.g., 500, 503), THE Extension SHALL retry the same model up to 2 additional times with exponential backoff before advancing to the next model in the fallback chain
+1. THE Extension SHALL use the user's personal Gemini API key (BYOK model) targeting Google AI Studio free tier models for all AI inference, achieving $0 compute cost to the user
+2. THE Extension SHALL use `gemini-3.6-flash` as the primary model for answer generation, vision/OCR processing, and embedding generation
+3. WHEN the primary model (`gemini-3.6-flash`) returns an HTTP 429 (rate limit exhaustion) or HTTP 404 (deprecated/invalid endpoint) response, THE Extension SHALL automatically retry the request using the first fallback model (`gemini-3.5-flash-lite`)
+4. WHEN the first fallback model (`gemini-3.5-flash-lite`) also returns an HTTP 429 or HTTP 404 response, THE Extension SHALL automatically retry the request using the second fallback model (`gemini-2.5-flash-lite`)
+5. WHEN all models in the fallback chain return HTTP 429 or HTTP 404 responses, THE Extension SHALL halt automated retries, display a notification informing the user that the free daily API limit has been reached or that models are unavailable, and preserve access to previously indexed data via the Backboard_API so the user can still browse prior answers
+6. THE Extension SHALL implement the fallback chain transparently to the user — the user SHALL NOT need to select or configure models manually
+7. THE Extension SHALL implement programmatic try-catch error interception in the API wrapper layer to catch HTTP 404 and HTTP 429 status codes and trigger automated sequential model fallback
+8. WHEN a model in the fallback chain returns a server error (e.g., HTTP 500, 503), THE Extension SHALL retry the same model up to 2 additional times with exponential backoff before advancing to the next model in the fallback chain
 9. THE Extension SHALL log which model successfully handled each request for debugging purposes, but SHALL NOT expose model selection details to the user in the main interface
