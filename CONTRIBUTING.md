@@ -99,6 +99,8 @@ Tasks have dependencies. Follow this order — each wave can only start after th
 3. **Merge scaffolding (Wave 1) first** — nothing works until the project structure exists
 4. **Use small, frequent PRs** — one per sub-task is fine
 5. **If you're blocked, ping in the group chat** — don't wait silently
+6. **No local vector store code** — Wave 1 scaffolding sets up IndexedDB for session/preferences ONLY. All vector storage, chunking, and embeddings are on Backboard.io. Do not build client-side vector search.
+7. **OCR/Vision routing** — Hunza's document processor detects text-less pages and routes them through Taksh's Gemini wrapper for OCR/Vision. Coordinate on the interface between these two components.
 
 ---
 
