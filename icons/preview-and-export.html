@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CourseChat Icons - Preview & Export</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 40px; background: #f5f5f5; }
+  h1 { color: #1a73e8; }
+  h2 { margin-top: 40px; color: #333; }
+  .icon-row { display: flex; align-items: end; gap: 30px; margin: 20px 0; }
+  .icon-item { text-align: center; }
+  .icon-item span { display: block; margin-top: 8px; font-size: 12px; color: #666; }
+  canvas { border: 1px solid #ddd; border-radius: 4px; }
+  .thumbnail { border: 2px solid #ddd; border-radius: 8px; }
+  .instructions { background: #fff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #1a73e8; }
+  button { background: #1a73e8; color: #fff; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin: 5px; font-size: 14px; }
+  button:hover { background: #1557b0; }
+</style>
+</head>
+<body>
+<h1>CourseChat - Icon Suite</h1>
+
+<div class="instructions">
+  <strong>How to export:</strong> Click the download buttons below each icon to save as PNG.
+</div>
+
+<h2>Chrome Extension Icons</h2>
+<div class="icon-row">
+  <div class="icon-item">
+    <canvas id="c16" width="16" height="16"></canvas>
+    <span>16×16</span>
+    <button onclick="download('c16','icon16.png')">Download</button>
+  </div>
+  <div class="icon-item">
+    <canvas id="c48" width="48" height="48"></canvas>
+    <span>48×48</span>
+    <button onclick="download('c48','icon48.png')">Download</button>
+  </div>
+  <div class="icon-item">
+    <canvas id="c128" width="128" height="128"></canvas>
+    <span>128×128</span>
+    <button onclick="download('c128','icon128.png')">Download</button>
+  </div>
+</div>
+
+<h2>Hackathon Submission Thumbnail (3:2 ratio, 900×600)</h2>
+<canvas id="thumbnail" width="900" height="600" class="thumbnail"></canvas>
+<br>
+<button onclick="download('thumbnail','coursechat-thumbnail.png')">Download Thumbnail (PNG)</button>
+
+<script>
+// Draw Chrome extension icons on canvases
+function drawExtensionIcon(canvasId, size) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext('2d');
+  const s = size / 128; // scale factor
+  
+  // Background
+  ctx.fillStyle = '#1a73e8';
+  roundRect(ctx, 0, 0, size, size, 20*s);
+  ctx.fill();
+  
+  // Document
+  ctx.fillStyle = 'rgba(255,255,255,0.95)';
+  roundRect(ctx, 20*s, 18*s, 56*s, 72*s, 6*s);
+  ctx.fill();
+  
+  // Text lines
+  ctx.strokeStyle = '#1a73e8';
+  ctx.lineWidth = Math.max(1, 3.5*s);
+  ctx.lineCap = 'round';
+  const lines = [[30,34,66,34],[30,44,60,44],[30,54,62,54],[30,64,54,64],[30,74,58,74]];
+  lines.forEach(([x1,y1,x2,y2]) => {
+    ctx.beginPath();
+    ctx.moveTo(x1*s, y1*s);
+    ctx.lineTo(x2*s, y2*s);
+    ctx.stroke();
+  });
+  
+  // Chat bubble
+  ctx.fillStyle = '#34a853';
+  ctx.beginPath();
+  ctx.moveTo(64*s, 74*s);
+  ctx.quadraticCurveTo(64*s, 62*s, 82*s, 62*s);
+  ctx.quadraticCurveTo(100*s, 62*s, 100*s, 74*s);
+  ctx.lineTo(100*s, 86*s);
+  ctx.quadraticCurveTo(100*s, 98*s, 82*s, 98*s);
+  ctx.lineTo(74*s, 98*s);
+  ctx.lineTo(66*s, 106*s);
+  ctx.lineTo(66*s, 98*s);
+  ctx.quadraticCurveTo(64*s, 98*s, 64*s, 86*s);
+  ctx.closePath();
+  ctx.fill();
+  
+  // Chat dots
+  ctx.fillStyle = '#fff';
+  [[74,80],[82,80],[90,80]].forEach(([x,y]) => {
+    ctx.beginPath();
+    ctx.arc(x*s, y*s, 3*s, 0, Math.PI*2);
+    ctx.fill();
+  });
+  
+  // Sparkle
+  ctx.fillStyle = '#fbbc04';
+  drawStar(ctx, 98*s, 30*s, 8*s);
+  drawStar(ctx, 88*s, 18*s, 5*s);
+}
+
+function drawStar(ctx, cx, cy, r) {
+  ctx.beginPath();
+  ctx.moveTo(cx, cy-r);
+  ctx.lineTo(cx+r*0.3, cy-r*0.3);
+  ctx.lineTo(cx+r, cy);
+  ctx.lineTo(cx+r*0.3, cy+r*0.3);
+  ctx.lineTo(cx, cy+r);
+  ctx.lineTo(cx-r*0.3, cy+r*0.3);
+  ctx.lineTo(cx-r, cy);
+  ctx.lineTo(cx-r*0.3, cy-r*0.3);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y);
+  ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+  ctx.lineTo(x+w, y+h-r);
+  ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h);
+  ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+  ctx.lineTo(x, y+r);
+  ctx.quadraticCurveTo(x, y, x+r, y);
+  ctx.closePath();
+}
+
+// Draw hackathon thumbnail
+function drawThumbnail() {
+  const canvas = document.getElementById('thumbnail');
+  const ctx = canvas.getContext('2d');
+  const W = 900, H = 600;
+  
+  // Gradient background
+  const grad = ctx.createLinearGradient(0, 0, W, H);
+  grad.addColorStop(0, '#1a73e8');
+  grad.addColorStop(1, '#0d47a1');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+  
+  // Subtle decorative circles
+  ctx.globalAlpha = 0.04;
+  ctx.fillStyle = '#fff';
+  [[150,480,120],[750,120,90],[80,80,60]].forEach(([x,y,r]) => {
+    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+  
+  // Big title - centered
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 96px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('CourseChat', W/2, 200);
+  
+  // Subtitle - large and readable
+  ctx.font = '42px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.fillText('Your LMS → AI Study Tutor', W/2, 280);
+  
+  // Icon row in the middle: doc + arrow + chat
+  // Document icon
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  roundRect(ctx, 270, 320, 80, 100, 8);
+  ctx.fill();
+  ctx.strokeStyle = '#1a73e8';
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  for(let i = 0; i < 4; i++) {
+    ctx.beginPath();
+    ctx.moveTo(286, 348 + i*18);
+    ctx.lineTo(286 + 48 - i*8, 348 + i*18);
+    ctx.stroke();
+  }
+  
+  // Arrow
+  ctx.strokeStyle = '#fbbc04';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(380, 370);
+  ctx.lineTo(430, 370);
+  ctx.lineTo(420, 358);
+  ctx.moveTo(430, 370);
+  ctx.lineTo(420, 382);
+  ctx.stroke();
+  
+  // Chat bubble
+  ctx.fillStyle = '#34a853';
+  ctx.beginPath();
+  ctx.moveTo(460, 330);
+  ctx.quadraticCurveTo(460, 310, 520, 310);
+  ctx.quadraticCurveTo(580, 310, 580, 340);
+  ctx.lineTo(580, 380);
+  ctx.quadraticCurveTo(580, 410, 520, 410);
+  ctx.lineTo(490, 410);
+  ctx.lineTo(475, 430);
+  ctx.lineTo(480, 410);
+  ctx.quadraticCurveTo(460, 410, 460, 380);
+  ctx.closePath();
+  ctx.fill();
+  
+  // Dots in chat
+  ctx.fillStyle = '#fff';
+  [496, 520, 544].forEach(x => {
+    ctx.beginPath(); ctx.arc(x, 362, 7, 0, Math.PI*2); ctx.fill();
+  });
+  
+  // Sparkle
+  ctx.fillStyle = '#fbbc04';
+  drawStar(ctx, 595, 318, 16);
+  
+  // Bottom features - big text
+  ctx.font = 'bold 32px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  ctx.textAlign = 'center';
+  ctx.fillText('Chrome Extension  •  Brightspace & Canvas  •  Gemini AI', W/2, 530);
+}
+
+// Download helper
+function download(canvasId, filename) {
+  const canvas = document.getElementById(canvasId);
+  const link = document.createElement('a');
+  link.download = filename;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+
+// Render all
+drawExtensionIcon('c16', 16);
+drawExtensionIcon('c48', 48);
+drawExtensionIcon('c128', 128);
+drawThumbnail();
+</script>
+</body>
+</html>
