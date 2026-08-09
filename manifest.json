@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "CourseChat",
+  "version": "0.1.0",
+  "description": "Turn your LMS course page into an AI-powered study tutor with cited sources.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting",
+    "sidePanel"
+  ],
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "side-panel/index.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.brightspace.com/*",
+        "https://*/d2l/*"
+      ],
+      "js": ["content-script.js"]
+    }
+  ],
+  "action": {
+    "default_title": "CourseChat"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

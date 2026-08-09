@@ -1,0 +1,29 @@
+{
+  "name": "coursechat",
+  "version": "0.1.0",
+  "description": "Chrome extension that turns your LMS course page into an AI tutor",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.0",
+    "pdfjs-dist": "^4.9.155",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.304",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.4.1",
+    "fast-check": "^4.1.1",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vitest": "^3.1.3"
+  }
+}

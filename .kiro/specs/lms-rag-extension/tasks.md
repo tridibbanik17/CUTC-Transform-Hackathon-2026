@@ -6,15 +6,15 @@ This plan implements a Chrome Manifest V3 browser extension that integrates a RA
 
 ## Tasks
 
-- [ ] 1. Project scaffolding, core interfaces, and local storage setup
-  - [ ] 1.1 Initialize Chrome Manifest V3 project structure
+- [x] 1. Project scaffolding, core interfaces, and local storage setup
+  - [x] 1.1 Initialize Chrome Manifest V3 project structure
     - Create directory layout: `src/platform/`, `src/platform/adapters/`, `src/content-script/`, `src/background/`, `src/side-panel/`, `src/shared/`, `tests/property/`, `tests/unit/`, `tests/integration/`
     - Create `manifest.json` with Manifest V3 configuration (side_panel, permissions for activeTab, storage, scripting)
     - Set up `tsconfig.json`, `package.json` with TypeScript, React, Vite bundler
     - Install dependencies: react, react-dom, pdf.js, fast-check, vitest, @google/generative-ai
     - _Requirements: 9.2, 13.1_
 
-  - [ ] 1.2 Define core TypeScript interfaces and types
+  - [x] 1.2 Define core TypeScript interfaces and types
     - Create `src/types/index.ts` with shared interfaces: `CourseMetadata`, `DocumentLink`, `ExtractedDocument`, `PageContent`, `CitationMetadata`, `Citation`, `RAGResponse`, `IndexingResult`, `CourseStatus`, `HistoryEntry`, `PreferenceRecord`, `AdapterStateRecord`
     - Create `src/types/messages.ts` with message types for communication between service worker, content script, and side panel
     - Define `GeminiResponse`, `GeminiWrapper`, `ModelFallbackChain`, `RetryConfig` interfaces
@@ -22,15 +22,15 @@ This plan implements a Chrome Manifest V3 browser extension that integrates a RA
     - Define `APIKeyManager` interface with methods: `storeKey`, `getKey`, `getMaskedKey`, `validateKey`, `removeKey`, `hasKey`
     - _Requirements: 1.4, 3.2, 4.1, 5.1, 9.9, 13.3, 13.4, 13.5_
 
-  - [ ] 1.3 Set up IndexedDB schema for local session data only
+  - [x] 1.3 Set up IndexedDB schema for local session data only
     - Create `src/background/db.ts` with database `lms-rag-session`
     - Object stores: `history` (key: `id`, index: `courseId+sessionId`), `preferences` (key: `key`), `adapters` (key: `name`)
     - Implement schema versioning and upgrade logic
     - Note: NO vector store or document metadata in IndexedDB — those live on Backboard.io
     - _Requirements: 7.7, 9.7, 11.1_
 
-- [ ] 2. API Key Manager (BYOK)
-  - [ ] 2.1 Implement API Key Manager module
+- [x] 2. API Key Manager (BYOK)
+  - [x] 2.1 Implement API Key Manager module
     - Create `src/background/api-key-manager.ts` implementing `APIKeyManager` interface
     - `storeKey(key)`: Store validated key in `chrome.storage.local` under key `lms_rag_gemini_api_key`
     - `getKey()`: Retrieve the full API key for transmission to Backboard.io
@@ -41,7 +41,7 @@ This plan implements a Chrome Manifest V3 browser extension that integrates a RA
     - Key is NOT stored in IndexedDB — uses `chrome.storage.local` for immediate access
     - _Requirements: 9.2, 9.3, 9.4, 9.9, 11.1_
 
-  - [ ]* 2.2 Write unit tests for API Key Manager
+  - [x]* 2.2 Write unit tests for API Key Manager
     - Test validation flow: valid key returns `{ valid: true }`, invalid key returns error message
     - Test masked key format (first 4 + last 4 characters visible)
     - Test store/retrieve/remove lifecycle
