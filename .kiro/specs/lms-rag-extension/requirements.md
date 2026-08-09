@@ -206,3 +206,17 @@ A browser extension that integrates a Retrieval-Augmented Generation (RAG) AI ag
 7. THE Extension SHALL implement programmatic try-catch error interception in the API wrapper layer to catch HTTP 404 and HTTP 429 status codes and trigger automated sequential model fallback
 8. WHEN a model in the fallback chain returns a server error (e.g., HTTP 500, 503), THE Extension SHALL retry the same model up to 2 additional times with exponential backoff before advancing to the next model in the fallback chain
 9. THE Extension SHALL log which model successfully handled each request for debugging purposes, but SHALL NOT expose model selection details to the user in the main interface
+
+### Requirement 14: Large Document and Textbook Support
+
+**User Story:** As a student, I want to index full digital textbooks (1000–1500 pages) without being blocked by API rate limits, so that I can query any course material regardless of its size.
+
+#### Acceptance Criteria
+
+1. WHEN the Extension encounters a document exceeding 100 pages, THE Extension SHALL offer the user the option to index the document incrementally by chapter or section rather than processing the entire document in a single session
+2. WHEN the user selects incremental indexing, THE Extension SHALL detect chapter or section boundaries using heading structure (H1/H2 headings or PDF bookmarks) and present a list of available sections for the user to select
+3. WHEN incremental indexing is active, THE Extension SHALL index only the selected sections in the current session and preserve progress so that remaining sections can be indexed in subsequent sessions without re-processing already-indexed sections
+4. IF the Gemini API returns HTTP 429 (rate limit exhaustion) during document indexing AND the fallback chain is fully exhausted, THEN THE Extension SHALL pause indexing at the current position, preserve all successfully indexed chunks on Backboard.io, and display a notification indicating how many pages/sections were indexed and how many remain; THE Extension SHALL automatically resume indexing from the paused position when the user returns in a subsequent session
+5. THE Extension SHALL support documents up to 200 MB in size (increased from 50 MB for textbooks); IF a document exceeds 200 MB, THEN THE Extension SHALL skip extraction and display a notification indicating the file exceeds the maximum supported size
+6. WHEN a large document is being indexed incrementally, THE Extension SHALL display progress at the section level (e.g., "Chapter 3 of 12 indexed") in addition to the document-level percentage
+7. WHEN a user queries a course with a partially-indexed textbook, THE RAG_Engine SHALL search only the sections that have been indexed so far and indicate in the response if the answer may be incomplete due to partial indexing
