@@ -161,8 +161,8 @@ This plan implements a Chrome Manifest V3 browser extension that integrates a RA
     - **Validates: Requirements 13.5**
     - Simulate all models returning 429/404; verify cloud calls are halted, "daily limit reached" notification is emitted, and Backboard.io data remains accessible
 
-- [ ] 7. Backboard.io client implementation
-  - [ ] 7.1 Implement Backboard.io client module
+- [x] 7. Backboard.io client implementation
+  - [x] 7.1 Implement Backboard.io client module
     - Create `src/background/backboard-client.ts` implementing `BackboardClient` interface
     - Implement `indexDocument(params)`: send extracted text + metadata + user API key + content hash to Backboard.io for chunking and embedding; return `IndexingResult`
     - Implement `hasDocument(courseId, apiKey, hash)`: check if document already indexed by hash (deduplication)
@@ -173,17 +173,17 @@ This plan implements a Chrome Manifest V3 browser extension that integrates a RA
     - Apply retry logic: max 2 retries with exponential backoff (1s, 3s) on 500/502/503/504; fail on 400/401/403; route 429/404 to Gemini wrapper fallback
     - _Requirements: 3.1, 3.2, 4.1, 8.1, 8.3, 8.4, 10.1, 11.2, 11.4, 11.6_
 
-  - [ ]* 7.2 Write property tests for course context isolation
+  - [x]* 7.2 Write property tests for course context isolation
     - **Property 14: Course context isolation**
     - **Validates: Requirements 8.1, 8.3**
     - Generate mock data for two courses; verify querying one course never returns chunks from the other
 
-  - [ ]* 7.3 Write property tests for course data deletion completeness
+  - [x]* 7.3 Write property tests for course data deletion completeness
     - **Property 20: Course data deletion completeness**
     - **Validates: Requirements 11.6**
     - After `deleteCourse()`, verify `getCourseStatus()` returns no records and `hasDocument()` returns false for all previously indexed hashes
 
-  - [ ]* 7.4 Write property tests for chunk size and non-empty constraint
+  - [x]* 7.4 Write property tests for chunk size and non-empty constraint
     - **Property 21: Chunk size and non-empty constraint on API transmission**
     - **Validates: Requirements 11.3**
     - Verify no text sent to Backboard.io is empty or zero-sized
