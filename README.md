@@ -35,6 +35,47 @@ Chrome extensions can't efficiently store vector databases or run similarity sea
 - **Backend**: Backboard.io (RAG orchestration, vector store)
 - **Testing**: Vitest, fast-check (property-based testing)
 
+## Supported File Types
+
+| Format | Extraction Method |
+|--------|-------------------|
+| PDF (.pdf) | PDF.js — page-level text with heading detection |
+| PPTX (.pptx) | ZIP/XML — slide text from `<a:t>` tags |
+| DOCX (.docx) | ZIP/XML — paragraph text with heading styles |
+| DOC (.doc) | Best-effort binary text scan |
+| ODT (.odt) | ZIP/XML — paragraphs and headings |
+| HTML (.html) | DOM parsing with script/style removal |
+| Jupyter (.ipynb) | JSON — markdown + code cells |
+| Plain text (.txt, .md) | Read as-is |
+| Source code (.py, .java, .js, .cpp, .css) | Read as-is |
+| CSV (.csv) | Read as-is |
+
+## Known Limitations
+
+### What CourseChat cannot do (current version)
+
+| Limitation | Reason | Planned Solution |
+|------------|--------|------------------|
+| **Cannot read diagrams, figures, or charts** | Images in PDFs/slides are stored as pixels, not text. Interpreting them requires a vision AI model (extra API calls, latency, quota burn). | On-demand diagram scanning: when text retrieval fails, offer a button to scan the specific page via Gemini Vision. One image at a time, user-controlled. |
+| **Cannot process videos or audio** | Requires transcription (Whisper, etc.), which is out of scope for a browser extension. | Future: support pre-generated transcripts if uploaded alongside videos. |
+| **Cannot read handwritten/scanned notes** | Scanned PDFs contain images of text, not actual text characters. PDF.js only extracts embedded text. | Same as diagrams — on-demand OCR via Gemini Vision. |
+| **50MB per-file size limit** | Extension fetches files into browser memory. Large files would freeze the service worker or get killed by Chrome. | Covers 99% of lecture materials. Extremely large files (full textbooks) should be split by the uploader. |
+| **Gemini free-tier rate limits** | ~1,500 requests/day shared across indexing and queries. Large courses may exhaust daily quota during initial indexing. | Multi-model fallback chain spreads load across 3 separate quota pools. Re-indexing resumes next day. |
+| **Legacy .doc extraction is imperfect** | Binary OLE2 format without a full parser. Gets most text but may miss formatting or include noise. | Recommend converting .doc to .docx before uploading (most LMS platforms auto-convert anyway). |
+| **No support for .xlsx, .ppt, .key, .zip archives** | Each requires a separate parser. Limited hackathon timeline. | Post-hackathon: add .xlsx (ZIP/XML) and .ppt (binary) support. |
+| **Answers are limited to indexed course content** | By design — no web search, no hallucination beyond source material. | This is a feature, not a bug. If the answer isn't in the course material, the system says "insufficient information" rather than making things up. |
+| **Single LMS platform (D2L Brightspace) at launch** | Platform adapter pattern supports multiple LMS, but only D2L is implemented for the hackathon. | Canvas adapter is architecturally ready — just needs DOM selectors for Canvas's page structure. |
+
+### What CourseChat does well
+
+- Indexes all text-based course documents automatically (no uploading, no manual work)
+- Answers with exact citations (document name, page number, section heading)
+- Works inside your existing LMS — no new app to open
+- $0 cost — uses your free Gemini API key
+- Supports 15 file formats covering CS, humanities, business, and STEM courses
+- Multi-model fallback ensures availability even when primary model is rate-limited
+- Course context isolation — each course has its own index, no cross-contamination
+
 ## Getting Started
 
 ```bash
