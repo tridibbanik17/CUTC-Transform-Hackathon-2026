@@ -387,8 +387,8 @@ This plan implements a Chrome Manifest V3 browser extension that integrates a RA
 - [ ] 12. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 13. Service worker message routing and integration wiring
-  - [ ] 13.1 Implement service worker message handler
+- [x] 13. Service worker message routing and integration wiring
+  - [x] 13.1 Implement service worker message handler
     - Create `src/background/service-worker.ts`
     - Register Chrome side panel on extension install
     - Route messages between content script, side panel, and background modules
@@ -398,7 +398,7 @@ This plan implements a Chrome Manifest V3 browser extension that integrates a RA
     - Gate indexing/query operations behind valid API key check
     - _Requirements: 7.1, 8.2, 9.4, 12.6, 13.5_
 
-  - [ ] 13.2 Wire content script injection and communication
+  - [x] 13.2 Wire content script injection and communication
     - Create `src/content-script/index.ts` entry point
     - Register content script for URL patterns matching all registered adapters (initially D2L Brightspace)
     - On page load, invoke AdapterRegistry.detectPlatform() and store the active adapter
@@ -406,7 +406,7 @@ This plan implements a Chrome Manifest V3 browser extension that integrates a RA
     - Handle course page navigation detection and notify service worker of course changes including platform name
     - _Requirements: 1.1, 8.2, 7.3, 12.2_
 
-  - [ ] 13.3 Wire extension icon click to toggle side panel
+  - [x] 13.3 Wire extension icon click to toggle side panel
     - Configure `chrome.sidePanel` API to open/close on action click
     - Ensure panel state persists across navigation within the active LMS platform
     - _Requirements: 7.1_
