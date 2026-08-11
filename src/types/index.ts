@@ -13,7 +13,7 @@ export interface CitationMetadata {
 export interface DocumentLink {
   url: string;
   fileName: string;
-  fileType: 'pdf' | 'pptx' | 'html' | 'png' | 'jpg' | 'jpeg' | 'txt' | 'md' | 'py' | 'java' | 'js' | 'cpp' | 'css' | 'csv' | 'ipynb';
+  fileType: 'pdf' | 'pptx' | 'html' | 'png' | 'jpg' | 'jpeg' | 'txt' | 'md' | 'py' | 'java' | 'js' | 'cpp' | 'css' | 'csv' | 'ipynb' | 'docx' | 'doc' | 'odt';
   fileSize?: number;
   lastModified?: string;
 }

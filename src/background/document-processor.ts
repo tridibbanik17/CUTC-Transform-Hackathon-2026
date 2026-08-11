@@ -48,6 +48,12 @@ export class DocumentProcessorImpl implements DocumentProcessorAPI {
         return this.extractHtml(arrayBuffer, link.fileName);
       case 'ipynb':
         return this.extractIpynb(arrayBuffer, link.fileName);
+      case 'docx':
+        return this.extractDocx(arrayBuffer, link.fileName);
+      case 'doc':
+        return this.extractDoc(arrayBuffer, link.fileName);
+      case 'odt':
+        return this.extractOdt(arrayBuffer, link.fileName);
       case 'txt':
       case 'md':
       case 'py':
@@ -422,6 +428,206 @@ export class DocumentProcessorImpl implements DocumentProcessorAPI {
     }
 
     return { fileName, fileType: 'ipynb', pages, totalCharacters };
+  }
+
+  // --- DOCX Extraction (ZIP/XML parsing) ---
+
+  private async extractDocx(buffer: ArrayBuffer, fileName: string): Promise<ExtractedDocument> {
+    const uint8 = new Uint8Array(buffer);
+    const files = this.parseZipEntries(uint8);
+
+    // Find word/document.xml — the main content file
+    const documentFile = files.find((f) => f.name === 'word/document.xml');
+    if (!documentFile) {
+      throw new Error(`Failed to extract DOCX content from ${fileName}: word/document.xml not found`);
+    }
+
+    const xml = new TextDecoder().decode(documentFile.data);
+    const { text, headings } = this.extractTextFromDocxXml(xml);
+
+    if (text.length === 0) {
+      return { fileName, fileType: 'docx', pages: [], totalCharacters: 0 };
+    }
+
+    return {
+      fileName,
+      fileType: 'docx',
+      pages: [{
+        pageNumber: 1,
+        headings,
+        text,
+      }],
+      totalCharacters: text.length,
+    };
+  }
+
+  /**
+   * Extract text from DOCX word/document.xml.
+   * Looks for <w:t> tags (text runs) and <w:p> (paragraphs).
+   * Detects headings via <w:pStyle w:val="Heading1"/> etc.
+   */
+  private extractTextFromDocxXml(xml: string): { text: string; headings: string[] } {
+    const headings: string[] = [];
+    const paragraphs: string[] = [];
+
+    // Split by paragraph elements <w:p>...</w:p>
+    const paragraphRegex = /<w:p[\s>][\s\S]*?<\/w:p>/g;
+    let pMatch;
+
+    while ((pMatch = paragraphRegex.exec(xml)) !== null) {
+      const pXml = pMatch[0];
+
+      // Extract all text runs <w:t>...</w:t>
+      const textRegex = /<w:t[^>]*>([\s\S]*?)<\/w:t>/g;
+      let tMatch;
+      let paragraphText = '';
+
+      while ((tMatch = textRegex.exec(pXml)) !== null) {
+        paragraphText += tMatch[1]
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"')
+          .replace(/&apos;/g, "'");
+      }
+
+      if (paragraphText.trim().length === 0) continue;
+
+      // Check if this paragraph has a heading style
+      const styleMatch = pXml.match(/<w:pStyle\s+w:val="([^"]*)"\/>/);
+      if (styleMatch && /heading/i.test(styleMatch[1])) {
+        headings.push(paragraphText.trim());
+      }
+
+      paragraphs.push(paragraphText);
+    }
+
+    return { text: paragraphs.join('\n').trim(), headings };
+  }
+
+  // --- DOC Extraction (legacy binary format — best effort) ---
+
+  private async extractDoc(buffer: ArrayBuffer, fileName: string): Promise<ExtractedDocument> {
+    // Legacy .doc is a binary OLE2 format. Full parsing requires a complex library.
+    // Best-effort approach: scan for readable ASCII/UTF-16 text sequences.
+    const uint8 = new Uint8Array(buffer);
+    const text = this.extractTextFromBinaryDoc(uint8);
+
+    if (text.length === 0) {
+      return { fileName, fileType: 'doc', pages: [], totalCharacters: 0 };
+    }
+
+    return {
+      fileName,
+      fileType: 'doc',
+      pages: [{
+        pageNumber: 1,
+        headings: [],
+        text,
+      }],
+      totalCharacters: text.length,
+    };
+  }
+
+  /**
+   * Best-effort text extraction from binary .doc files.
+   * Scans for contiguous printable ASCII sequences (minimum length 4).
+   * Won't capture formatting or structure but gets raw text content.
+   */
+  private extractTextFromBinaryDoc(data: Uint8Array): string {
+    const textChunks: string[] = [];
+    let currentChunk = '';
+
+    for (let i = 0; i < data.length; i++) {
+      const byte = data[i];
+      // Printable ASCII range + common whitespace
+      if ((byte >= 32 && byte <= 126) || byte === 10 || byte === 13 || byte === 9) {
+        currentChunk += String.fromCharCode(byte);
+      } else {
+        if (currentChunk.trim().length >= 4) {
+          textChunks.push(currentChunk.trim());
+        }
+        currentChunk = '';
+      }
+    }
+
+    if (currentChunk.trim().length >= 4) {
+      textChunks.push(currentChunk.trim());
+    }
+
+    // Filter out binary noise — keep only chunks that look like real text
+    const filtered = textChunks.filter((chunk) => {
+      const words = chunk.split(/\s+/);
+      return words.length >= 2 && chunk.length >= 10;
+    });
+
+    return filtered.join('\n').trim();
+  }
+
+  // --- ODT Extraction (ZIP/XML parsing, similar to DOCX) ---
+
+  private async extractOdt(buffer: ArrayBuffer, fileName: string): Promise<ExtractedDocument> {
+    const uint8 = new Uint8Array(buffer);
+    const files = this.parseZipEntries(uint8);
+
+    // Find content.xml — the main content file in ODT
+    const contentFile = files.find((f) => f.name === 'content.xml');
+    if (!contentFile) {
+      throw new Error(`Failed to extract ODT content from ${fileName}: content.xml not found`);
+    }
+
+    const xml = new TextDecoder().decode(contentFile.data);
+    const { text, headings } = this.extractTextFromOdtXml(xml);
+
+    if (text.length === 0) {
+      return { fileName, fileType: 'odt', pages: [], totalCharacters: 0 };
+    }
+
+    return {
+      fileName,
+      fileType: 'odt',
+      pages: [{
+        pageNumber: 1,
+        headings,
+        text,
+      }],
+      totalCharacters: text.length,
+    };
+  }
+
+  /**
+   * Extract text from ODT content.xml.
+   * Looks for <text:p> paragraphs and <text:h> headings.
+   */
+  private extractTextFromOdtXml(xml: string): { text: string; headings: string[] } {
+    const headings: string[] = [];
+    const paragraphs: string[] = [];
+
+    // Extract headings <text:h ...>...</text:h>
+    const headingRegex = /<text:h[^>]*>([\s\S]*?)<\/text:h>/g;
+    let hMatch;
+    while ((hMatch = headingRegex.exec(xml)) !== null) {
+      const headingText = hMatch[1].replace(/<[^>]+>/g, '').trim();
+      if (headingText) {
+        headings.push(headingText);
+        paragraphs.push(headingText);
+      }
+    }
+
+    // Extract paragraphs <text:p ...>...</text:p>
+    const paragraphRegex = /<text:p[^>]*>([\s\S]*?)<\/text:p>/g;
+    let pMatch;
+    while ((pMatch = paragraphRegex.exec(xml)) !== null) {
+      const pText = pMatch[1].replace(/<[^>]+>/g, '').trim();
+      if (pText) {
+        paragraphs.push(pText);
+      }
+    }
+
+    return {
+      text: paragraphs.join('\n').trim(),
+      headings,
+    };
   }
 }
 
