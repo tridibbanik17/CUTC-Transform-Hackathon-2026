@@ -89,7 +89,7 @@ This plan implements a Chrome Manifest V3 browser extension that integrates a RA
     - Verify all D2L-patterned URLs are matched by the adapter
     - Verify non-D2L URLs (Canvas, Moodle, generic websites) are not matched
 
-- [ ] 4. Content scraper and document processor (local text extraction only)
+- [x] 4. Content scraper and document processor (local text extraction only)
   - [ ] 4.1 Implement content scraper delegating to active platform adapter
     - Create `src/content-script/scraper.ts` implementing `ScraperAPI`
     - `getCourseMetadata()` delegates to the active adapter's `extractCourseId()` and `extractCourseName()` and includes `platform` field from adapter's `name`
@@ -99,7 +99,7 @@ This plan implements a Chrome Manifest V3 browser extension that integrates a RA
     - Return `null` for pages where no adapter is active
     - _Requirements: 1.1, 7.5, 12.1, 12.2_
 
-  - [ ] 4.2 Implement document text extraction (PDF, PPTX, HTML)
+  - [x] 4.2 Implement document text extraction (PDF, PPTX, HTML)
     - Create `src/background/document-processor.ts` implementing `DocumentProcessorAPI`
     - Implement PDF extraction using PDF.js: fetch document, extract text per page with page numbers and headings
     - Implement PPTX extraction: parse ZIP, extract XML slide text with slide numbers as page numbers
