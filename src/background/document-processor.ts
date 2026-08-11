@@ -46,6 +46,17 @@ export class DocumentProcessorImpl implements DocumentProcessorAPI {
         return this.extractPptx(arrayBuffer, link.fileName);
       case 'html':
         return this.extractHtml(arrayBuffer, link.fileName);
+      case 'ipynb':
+        return this.extractIpynb(arrayBuffer, link.fileName);
+      case 'txt':
+      case 'md':
+      case 'py':
+      case 'java':
+      case 'js':
+      case 'cpp':
+      case 'css':
+      case 'csv':
+        return this.extractPlainText(arrayBuffer, link.fileName, link.fileType);
       default:
         throw new Error(`Unsupported file type: ${link.fileType}`);
     }
@@ -316,6 +327,101 @@ export class DocumentProcessorImpl implements DocumentProcessorAPI {
       pages,
       totalCharacters: bodyText.length,
     };
+  }
+
+  // --- Plain Text / Code File Extraction ---
+
+  private async extractPlainText(
+    buffer: ArrayBuffer,
+    fileName: string,
+    fileType: string
+  ): Promise<ExtractedDocument> {
+    const text = new TextDecoder().decode(buffer).trim();
+
+    if (text.length === 0) {
+      return { fileName, fileType, pages: [], totalCharacters: 0 };
+    }
+
+    const headings: string[] = [];
+
+    // Heuristic: first non-empty line that looks like a title/comment
+    const firstLine = text.split('\n')[0]?.trim() ?? '';
+    if (firstLine.startsWith('#') || firstLine.startsWith('//') || firstLine.startsWith('/*')) {
+      headings.push(firstLine.replace(/^[#/\*\s]+/, '').trim());
+    }
+
+    return {
+      fileName,
+      fileType,
+      pages: [{
+        pageNumber: 1,
+        headings,
+        text,
+      }],
+      totalCharacters: text.length,
+    };
+  }
+
+  // --- Jupyter Notebook (.ipynb) Extraction ---
+
+  private async extractIpynb(buffer: ArrayBuffer, fileName: string): Promise<ExtractedDocument> {
+    const jsonText = new TextDecoder().decode(buffer);
+    let notebook: {
+      cells?: Array<{
+        cell_type: string;
+        source: string | string[];
+      }>;
+    };
+
+    try {
+      notebook = JSON.parse(jsonText);
+    } catch {
+      throw new Error(`Failed to parse Jupyter notebook ${fileName}: invalid JSON`);
+    }
+
+    if (!notebook.cells || !Array.isArray(notebook.cells)) {
+      return { fileName, fileType: 'ipynb', pages: [], totalCharacters: 0 };
+    }
+
+    const pages: PageContent[] = [];
+    let totalCharacters = 0;
+    let cellNumber = 0;
+
+    for (const cell of notebook.cells) {
+      cellNumber++;
+
+      // Get cell source (can be string or array of strings)
+      const source = Array.isArray(cell.source) ? cell.source.join('') : cell.source;
+      const trimmed = source.trim();
+
+      if (trimmed.length === 0) continue;
+
+      const headings: string[] = [];
+
+      if (cell.cell_type === 'markdown') {
+        // Extract markdown headings
+        const lines = trimmed.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('#')) {
+            headings.push(line.replace(/^#+\s*/, '').trim());
+          }
+        }
+      }
+
+      // Prefix code cells to make it clear in retrieval
+      const cellText = cell.cell_type === 'code'
+        ? `[Code Cell ${cellNumber}]\n${trimmed}`
+        : trimmed;
+
+      pages.push({
+        pageNumber: cellNumber,
+        headings,
+        text: cellText,
+      });
+      totalCharacters += cellText.length;
+    }
+
+    return { fileName, fileType: 'ipynb', pages, totalCharacters };
   }
 }
 
