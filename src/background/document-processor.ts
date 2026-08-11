@@ -60,8 +60,10 @@ export class DocumentProcessorImpl implements DocumentProcessorAPI {
       case 'java':
       case 'js':
       case 'cpp':
+      case 'c':
       case 'css':
       case 'csv':
+      case 'm':
         return this.extractPlainText(arrayBuffer, link.fileName, link.fileType);
       default:
         throw new Error(`Unsupported file type: ${link.fileType}`);
