@@ -5,8 +5,8 @@
 // Will be replaced by full RAG pipeline when Backboard.io is wired.
 // ============================================================
 
-const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const MODEL = 'gemini-2.0-flash';
+const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1alpha/models';
+const MODEL = 'gemini-2.5-flash';
 
 interface DirectQueryResult {
   answer: string;
