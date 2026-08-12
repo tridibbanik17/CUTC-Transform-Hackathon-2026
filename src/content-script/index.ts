@@ -66,8 +66,39 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       break;
 
     case 'GET_PAGE_TEXT':
-      // Extract all visible text from the current page for indexing
-      sendResponse({ payload: { text: document.body.innerText } });
+      // Extract all visible text from the current page + iframes for indexing
+      let fullText = document.body.innerText || '';
+      
+      // Also try to get text from iframes (D2L embeds content in iframes)
+      try {
+        const iframes = document.querySelectorAll('iframe');
+        for (const iframe of iframes) {
+          try {
+            const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+            if (iframeDoc?.body) {
+              fullText += '\n\n' + (iframeDoc.body.innerText || '');
+            }
+          } catch {
+            // Cross-origin iframe, skip
+          }
+        }
+      } catch {
+        // Ignore iframe access errors
+      }
+
+      // Also get text from shadow DOMs if any
+      try {
+        const allElements = document.querySelectorAll('*');
+        for (const el of allElements) {
+          if (el.shadowRoot) {
+            fullText += '\n\n' + (el.shadowRoot.textContent || '');
+          }
+        }
+      } catch {
+        // Ignore
+      }
+
+      sendResponse({ payload: { text: fullText } });
       break;
 
     default:
