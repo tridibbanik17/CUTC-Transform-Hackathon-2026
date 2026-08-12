@@ -92,73 +92,40 @@ async function startIndexing(courseId: string) {
     return { type: 'ERROR', payload: { message: 'No API key configured. Please add your Gemini API key in settings.', code: 'NO_API_KEY' } };
   }
 
-  // Get document links from content script
+  // Get active tab
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) {
     return { type: 'ERROR', payload: { message: 'No active tab found.', code: 'NO_TAB' } };
   }
 
-  let links: Array<{ url: string; fileName: string }> = [];
+  // Ask content script for page text
+  let pageText = '';
   try {
-    const res = await chrome.tabs.sendMessage(tab.id, { type: 'GET_DOCUMENT_LINKS' });
-    links = res?.payload?.links ?? [];
+    const res = await chrome.tabs.sendMessage(tab.id, { type: 'GET_PAGE_TEXT' });
+    pageText = res?.payload?.text ?? '';
   } catch {
-    // Content script not available
-  }
-
-  // If no links from adapter, try to extract text from the current page directly
-  if (links.length === 0) {
+    // Content script not injected — try scripting API as fallback
     try {
       const [result] = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
         func: () => document.body.innerText,
       });
-      const pageText = result?.result ?? '';
-      if (pageText.length > 50) {
-        await storeCourseContext(courseId, pageText.slice(0, 100000)); // Cap at 100k chars for Gemini context
-        return {
-          type: 'INDEXING_COMPLETE',
-          payload: { success: true, documentsIndexed: 1, chunksCreated: 1, failures: [] },
-        };
-      }
+      pageText = result?.result ?? '';
     } catch {
-      // scripting permission may fail
-    }
-
-    return {
-      type: 'ERROR',
-      payload: { message: 'No documents found on this page to index.', code: 'NO_DOCUMENTS' },
-    };
-  }
-
-  // Fetch and extract text from each document link
-  let allText = '';
-  let docsIndexed = 0;
-  const failures: Array<{ fileName: string; error: string }> = [];
-
-  for (const link of links) {
-    try {
-      const response = await fetch(link.url);
-      if (!response.ok) {
-        failures.push({ fileName: link.fileName, error: `HTTP ${response.status}` });
-        continue;
-      }
-      const text = await response.text();
-      allText += `\n\n--- ${link.fileName} ---\n${text}`;
-      docsIndexed++;
-    } catch (err) {
-      failures.push({ fileName: link.fileName, error: err instanceof Error ? err.message : 'Unknown' });
+      return { type: 'ERROR', payload: { message: 'Cannot access page content. Make sure you are on a supported LMS page.', code: 'ACCESS_DENIED' } };
     }
   }
 
-  if (allText.length > 0) {
-    // Cap context at 100k chars for Gemini's context window
-    await storeCourseContext(courseId, allText.slice(0, 100000));
+  if (pageText.trim().length < 50) {
+    return { type: 'ERROR', payload: { message: 'Not enough text content found on this page to index.', code: 'NO_CONTENT' } };
   }
+
+  // Store context (cap at 100k chars for Gemini context window)
+  await storeCourseContext(courseId, pageText.slice(0, 100000));
 
   return {
     type: 'INDEXING_COMPLETE',
-    payload: { success: docsIndexed > 0, documentsIndexed: docsIndexed, chunksCreated: docsIndexed, failures },
+    payload: { success: true, documentsIndexed: 1, chunksCreated: 1, failures: [] },
   };
 }
 

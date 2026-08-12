@@ -65,6 +65,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       sendResponse({ payload: { links: [] } });
       break;
 
+    case 'GET_PAGE_TEXT':
+      // Extract all visible text from the current page for indexing
+      sendResponse({ payload: { text: document.body.innerText } });
+      break;
+
     default:
       sendResponse({ payload: null });
   }
