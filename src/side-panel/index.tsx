@@ -23,6 +23,64 @@ const styles = {
   row: { display: 'flex', gap: '8px', alignItems: 'center' } as React.CSSProperties,
 };
 
+// --- Simple Markdown Renderer ---
+function FormattedAnswer({ text }: { text: string }) {
+  // Convert basic markdown to HTML-like rendering
+  const lines = text.split('\n');
+  const elements: React.ReactNode[] = [];
+
+  lines.forEach((line, i) => {
+    let content: React.ReactNode = line;
+
+    // Bold: **text**
+    if (line.includes('**')) {
+      const parts = line.split(/\*\*(.*?)\*\*/g);
+      content = parts.map((part, j) =>
+        j % 2 === 1 ? <strong key={j}>{part}</strong> : part
+      );
+    }
+
+    // Bullet points: * text or - text
+    if (line.match(/^\s*[\*\-]\s/)) {
+      const bulletText = line.replace(/^\s*[\*\-]\s/, '');
+      // Apply bold within bullet
+      let bulletContent: React.ReactNode = bulletText;
+      if (bulletText.includes('**')) {
+        const parts = bulletText.split(/\*\*(.*?)\*\*/g);
+        bulletContent = parts.map((part, j) =>
+          j % 2 === 1 ? <strong key={j}>{part}</strong> : part
+        );
+      }
+      elements.push(
+        <div key={i} style={{ paddingLeft: '12px', marginBottom: '4px' }}>
+          • {bulletContent}
+        </div>
+      );
+      return;
+    }
+
+    // Empty lines = paragraph break
+    if (line.trim() === '') {
+      elements.push(<div key={i} style={{ height: '8px' }} />);
+      return;
+    }
+
+    // Source/citation lines (italic)
+    if (line.startsWith('*Source:') || line.startsWith('(*')) {
+      elements.push(
+        <div key={i} style={{ fontSize: '11px', color: '#1a73e8', marginTop: '8px', fontStyle: 'italic' }}>
+          {content}
+        </div>
+      );
+      return;
+    }
+
+    elements.push(<div key={i} style={{ marginBottom: '2px' }}>{content}</div>);
+  });
+
+  return <>{elements}</>;
+}
+
 // --- App Component ---
 function App() {
   const [apiKey, setApiKey] = useState('');
@@ -282,11 +340,11 @@ function App() {
             <div key={i} style={{ marginBottom: '12px' }}>
               <div style={{ fontSize: '12px', fontWeight: 600, color: '#333' }}>Q: {a.query}</div>
               <div style={styles.answer}>
-                {a.status === 'success' && a.answer}
+                {a.status === 'success' && <FormattedAnswer text={a.answer} />}
                 {a.status === 'low_confidence' && (
                   <>
                     <span style={{ ...styles.badge, background: '#fef7e0', color: '#9a6700', marginBottom: '4px' }}>⚠️ Low confidence</span><br />
-                    {a.answer}
+                    <FormattedAnswer text={a.answer} />
                   </>
                 )}
                 {a.status === 'insufficient_information' && (
