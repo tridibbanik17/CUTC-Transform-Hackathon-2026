@@ -45,10 +45,7 @@ ${courseContext}`;
         ],
         generationConfig: {
           maxOutputTokens: 8192,
-          temperature: 0.3,
-          thinkingConfig: {
-            thinkingBudget: 0
-          }
+          temperature: 1,
         },
       }),
     });
