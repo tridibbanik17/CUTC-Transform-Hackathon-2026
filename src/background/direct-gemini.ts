@@ -6,7 +6,7 @@
 // ============================================================
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const MODEL = 'gemini-1.5-flash';
+const MODEL = 'gemini-2.5-flash-lite';
 
 interface DirectQueryResult {
   answer: string;
@@ -44,8 +44,11 @@ ${courseContext}`;
           { role: 'user', parts: [{ text: `${systemPrompt}\n\nSTUDENT QUESTION: ${query}` }] }
         ],
         generationConfig: {
-          maxOutputTokens: 1024,
+          maxOutputTokens: 8192,
           temperature: 0.3,
+          thinkingConfig: {
+            thinkingBudget: 0
+          }
         },
       }),
     });
@@ -63,7 +66,10 @@ ${courseContext}`;
     }
 
     const data = await response.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    // Thinking models may return multiple parts - get the last text part (the actual response)
+    const parts = data?.candidates?.[0]?.content?.parts ?? [];
+    const textParts = parts.filter((p: any) => p.text && !p.thought);
+    const text = textParts.length > 0 ? textParts[textParts.length - 1].text : (parts[parts.length - 1]?.text ?? '');
 
     if (!text || text.includes("couldn't find this information")) {
       return { answer: text || 'No relevant information found in course materials.', status: 'insufficient_information', citations: [] };
