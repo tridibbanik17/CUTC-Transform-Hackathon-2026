@@ -118,7 +118,8 @@ function App() {
     setIndexing(false);
 
     if (res?.type === 'INDEXING_COMPLETE' && res.payload.success) {
-      setIndexResult(`✓ Indexed ${res.payload.documentsIndexed} document(s). Ready to answer questions!`);
+      const chars = res.payload._contextLength ? ` (${res.payload._contextLength} chars)` : '';
+      setIndexResult(`✓ Indexed ${res.payload.documentsIndexed} document(s)${chars}. Ready to answer questions!`);
     } else if (res?.type === 'ERROR') {
       setIndexResult(`✗ ${res.payload.message}`);
     } else {

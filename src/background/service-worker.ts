@@ -121,11 +121,12 @@ async function startIndexing(courseId: string) {
   }
 
   // Store context (cap at 100k chars for Gemini context window)
-  await storeCourseContext(courseId, pageText.slice(0, 100000));
+  const contextToStore = pageText.slice(0, 100000);
+  await storeCourseContext(courseId, contextToStore);
 
   return {
     type: 'INDEXING_COMPLETE',
-    payload: { success: true, documentsIndexed: 1, chunksCreated: 1, failures: [] },
+    payload: { success: true, documentsIndexed: 1, chunksCreated: 1, failures: [], _contextLength: contextToStore.length },
   };
 }
 

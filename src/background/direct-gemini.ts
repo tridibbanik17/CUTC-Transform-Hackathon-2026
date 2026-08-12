@@ -68,8 +68,8 @@ ${courseContext}`;
     const textParts = parts.filter((p: any) => p.text && !p.thought);
     const text = textParts.length > 0 ? textParts[textParts.length - 1].text : (parts[parts.length - 1]?.text ?? '');
 
-    if (!text || text.includes("couldn't find this information")) {
-      return { answer: text || 'No relevant information found in course materials.', status: 'insufficient_information', citations: [] };
+    if (!text) {
+      return { answer: 'No response generated.', status: 'insufficient_information', citations: [] };
     }
 
     // Try to extract citation hints from the response
