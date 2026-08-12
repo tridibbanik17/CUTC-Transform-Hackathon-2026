@@ -78,33 +78,29 @@ function findPdfUrls(): string[] {
 // Get all text from page including iframes — auto-scrolls PDF viewer first
 function getPageText(): Promise<string> {
   return new Promise((resolve) => {
-    // Find the PDF viewer scroll container
-    const pdfViewer = document.querySelector('#ContentView, .d2l-page-main, [class*="content-view"], .pdf-viewer, [id*="viewer"]') 
-      || document.querySelector('iframe')?.contentDocument?.querySelector('.page')?.parentElement
-      || document.documentElement;
+    // Find all scrollable containers on the page and scroll them
+    const scrollables: Element[] = [];
     
-    // Auto-scroll to load all lazy content
-    const scrollContainer = pdfViewer || document.documentElement;
-    const originalScrollTop = scrollContainer.scrollTop;
-    let totalHeight = scrollContainer.scrollHeight;
-    let currentPos = 0;
-    const scrollStep = 800;
+    // The D2L PDF viewer is typically in a div with overflow:auto/scroll
+    document.querySelectorAll('*').forEach((el) => {
+      const style = window.getComputedStyle(el);
+      const isScrollable = (style.overflow === 'auto' || style.overflow === 'scroll' || 
+                           style.overflowY === 'auto' || style.overflowY === 'scroll');
+      if (isScrollable && el.scrollHeight > el.clientHeight + 100) {
+        scrollables.push(el);
+      }
+    });
 
-    function scrollAndCollect() {
-      if (currentPos < totalHeight) {
-        scrollContainer.scrollTop = currentPos;
-        currentPos += scrollStep;
-        totalHeight = scrollContainer.scrollHeight; // Update in case it grows
-        setTimeout(scrollAndCollect, 50); // 50ms between scrolls
-      } else {
-        // Scroll back to top
-        scrollContainer.scrollTop = originalScrollTop;
-        
-        // Now collect all text
+    // Also add the main document
+    scrollables.push(document.documentElement);
+
+    let containersProcessed = 0;
+
+    function processNextContainer() {
+      if (containersProcessed >= scrollables.length) {
+        // All scrolled — now collect text
         setTimeout(() => {
           let text = document.body.innerText || '';
-          
-          // Try same-origin iframes
           try {
             document.querySelectorAll('iframe').forEach((iframe) => {
               try {
@@ -113,13 +109,33 @@ function getPageText(): Promise<string> {
               } catch {}
             });
           } catch {}
-          
           resolve(text);
-        }, 200); // Wait for DOM to update after final scroll
+        }, 300);
+        return;
       }
+
+      const container = scrollables[containersProcessed];
+      const totalHeight = container.scrollHeight;
+      const originalTop = container.scrollTop;
+      let pos = 0;
+
+      function scrollStep() {
+        if (pos < totalHeight) {
+          container.scrollTop = pos;
+          pos += 600;
+          setTimeout(scrollStep, 30);
+        } else {
+          // Restore position
+          container.scrollTop = originalTop;
+          containersProcessed++;
+          setTimeout(processNextContainer, 100);
+        }
+      }
+
+      scrollStep();
     }
 
-    scrollAndCollect();
+    processNextContainer();
   });
 }
 
