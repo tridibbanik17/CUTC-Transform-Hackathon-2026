@@ -8,6 +8,48 @@ import type { ServiceWorkerMessage } from '@/types/messages';
 import { apiKeyManager } from './api-key-manager';
 import { directGeminiQuery, getCourseContext, storeCourseContext } from './direct-gemini';
 
+/**
+ * Extract readable text strings from raw PDF bytes.
+ * PDFs store text in streams — this finds parenthesized strings (Tj/TJ operators)
+ * and Unicode text. Not perfect but captures most readable content.
+ */
+function extractTextFromPdfBytes(bytes: Uint8Array): string {
+  const chunks: string[] = [];
+  const decoder = new TextDecoder('utf-8', { fatal: false });
+  const text = decoder.decode(bytes);
+
+  // Extract text from PDF text operators: (text) Tj and [(text)] TJ
+  const tjMatches = text.match(/\(([^)]{2,})\)/g) || [];
+  for (const match of tjMatches) {
+    const inner = match.slice(1, -1)
+      .replace(/\\n/g, '\n')
+      .replace(/\\r/g, '')
+      .replace(/\\t/g, ' ')
+      .replace(/\\\(/g, '(')
+      .replace(/\\\)/g, ')')
+      .replace(/\\\\/g, '\\');
+    
+    // Only keep strings that look like real text (has letters/numbers)
+    if (inner.match(/[a-zA-Z0-9]{2,}/) && inner.length >= 2) {
+      chunks.push(inner);
+    }
+  }
+
+  // Also try to find BT...ET text blocks with readable content
+  const btBlocks = text.match(/BT[\s\S]{1,5000}?ET/g) || [];
+  for (const block of btBlocks) {
+    const blockTexts = block.match(/\(([^)]{2,})\)/g) || [];
+    for (const bt of blockTexts) {
+      const inner = bt.slice(1, -1);
+      if (inner.match(/[a-zA-Z0-9]{2,}/)) {
+        // Already captured above, skip duplicates
+      }
+    }
+  }
+
+  return chunks.join(' ').replace(/\s+/g, ' ').trim();
+}
+
 // --- Side Panel Registration ---
 
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
@@ -121,31 +163,30 @@ async function startIndexing(courseId: string) {
 
   // If we found PDF URLs, fetch and extract text from them
   if (pdfUrls.length > 0) {
-    for (const pdfUrl of pdfUrls.slice(0, 5)) { // Limit to 5 PDFs
+    for (const pdfUrl of pdfUrls.slice(0, 3)) {
       try {
-        const response = await fetch(pdfUrl);
+        const response = await fetch(pdfUrl, { credentials: 'include' });
         if (!response.ok) continue;
         
         const contentType = response.headers.get('content-type') || '';
-        if (contentType.includes('pdf')) {
-          // For PDFs, get the raw text from the response
-          // PDF.js needs ArrayBuffer but we're in service worker - use text extraction
-          const blob = await response.blob();
-          const text = await blob.text();
-          // PDF binary won't give readable text this way, but try anyway
-          // The real PDF.js extraction is in document-processor.ts
-          // For demo: skip binary PDFs, rely on page text
-        } else {
-          // HTML content page - extract text
+        
+        if (contentType.includes('html') || contentType.includes('text')) {
           const htmlText = await response.text();
-          // Strip HTML tags
           const stripped = htmlText.replace(/<script[\s\S]*?<\/script>/gi, '')
             .replace(/<style[\s\S]*?<\/style>/gi, '')
             .replace(/<[^>]+>/g, ' ')
             .replace(/\s+/g, ' ')
             .trim();
-          if (stripped.length > 100) {
+          if (stripped.length > 200) {
             allText += '\n\n--- Document ---\n' + stripped;
+          }
+        } else if (contentType.includes('pdf') || contentType.includes('octet-stream')) {
+          // Extract readable ASCII strings from PDF binary
+          const buffer = await response.arrayBuffer();
+          const bytes = new Uint8Array(buffer);
+          const pdfText = extractTextFromPdfBytes(bytes);
+          if (pdfText.length > 100) {
+            allText += '\n\n--- PDF Document ---\n' + pdfText;
           }
         }
       } catch {

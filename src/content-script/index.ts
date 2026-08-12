@@ -33,36 +33,44 @@ detectPlatform();
 // Find all PDF URLs on the current D2L page
 function findPdfUrls(): string[] {
   const urls: string[] = [];
-  const pageHtml = document.documentElement.innerHTML;
   const origin = window.location.origin;
 
-  // D2L content file URLs: /content/enforced/COURSEID/filename.pdf
-  const contentMatches = pageHtml.match(/\/content\/enforced\/[^"'\s<>]+\.pdf/gi) || [];
-  contentMatches.forEach((path) => urls.push(origin + path));
+  // D2L Download button — this is the most reliable way to get the actual PDF
+  document.querySelectorAll('a[href*="Download"], a[download], button[data-download], a.d2l-button').forEach((el) => {
+    const href = (el as HTMLAnchorElement).href;
+    if (href && href.startsWith('http')) urls.push(href);
+  });
 
-  // D2L viewContent URLs
-  const viewContentMatches = pageHtml.match(/\/d2l\/le\/content\/\d+\/viewContent\/\d+\/View/gi) || [];
-  viewContentMatches.forEach((path) => urls.push(origin + path));
+  // D2L content file URLs in links
+  document.querySelectorAll('a[href*="/content/enforced/"], a[href*="/content/"], a[href*=".pdf"]').forEach((a) => {
+    const href = (a as HTMLAnchorElement).href;
+    if (href) urls.push(href);
+  });
 
-  // Direct PDF links anywhere
-  const directPdfMatches = pageHtml.match(/https?:\/\/[^"'\s<>]+\.pdf/gi) || [];
+  // Look for D2L's file download pattern in page HTML
+  const pageHtml = document.documentElement.innerHTML;
+  
+  // Pattern: /d2l/le/content/COURSEID/topics/files/download/FILEID/DirectFileTopicDownload
+  const downloadMatches = pageHtml.match(/\/d2l\/le\/content\/\d+\/topics\/files\/download\/[^"'\s<>]+/gi) || [];
+  downloadMatches.forEach((path) => urls.push(origin + path));
+
+  // Pattern: /content/enforced/COURSEID-NAME/filename.pdf
+  const enforcedMatches = pageHtml.match(/\/content\/enforced\/[^"'\s<>]+\.pdf/gi) || [];
+  enforcedMatches.forEach((path) => urls.push(origin + path));
+
+  // Direct PDF links
+  const directPdfMatches = pageHtml.match(/https?:\/\/[^"'\s<>]+\.pdf[^"'\s<>]*/gi) || [];
   directPdfMatches.forEach((url) => urls.push(url));
 
-  // Object/embed sources
-  document.querySelectorAll('object[data], embed[src]').forEach((el) => {
-    const src = (el as HTMLObjectElement).data || (el as HTMLEmbedElement).src;
-    if (src && (src.includes('.pdf') || src.includes('/content/'))) {
-      urls.push(src.startsWith('http') ? src : origin + src);
+  // D2L viewContent URL (current page might be one)
+  const currentUrl = window.location.href;
+  if (currentUrl.includes('/viewContent/') || currentUrl.includes('/topics/')) {
+    // Try to construct download URL from current page URL
+    const topicMatch = currentUrl.match(/\/d2l\/le\/content\/(\d+)\/viewContent\/(\d+)/);
+    if (topicMatch) {
+      urls.push(`${origin}/d2l/le/content/${topicMatch[1]}/topics/files/download/${topicMatch[2]}/DirectFileTopicDownload`);
     }
-  });
-
-  // Iframe sources that might be PDF viewers
-  document.querySelectorAll('iframe[src]').forEach((iframe) => {
-    const src = (iframe as HTMLIFrameElement).src;
-    if (src && (src.includes('.pdf') || src.includes('/content/') || src.includes('viewContent'))) {
-      urls.push(src);
-    }
-  });
+  }
 
   return [...new Set(urls)];
 }
