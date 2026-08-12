@@ -6,7 +6,7 @@
 // ============================================================
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const MODEL = 'gemini-2.5-flash';
+const MODEL = 'gemini-2.0-flash';
 
 interface DirectQueryResult {
   answer: string;
@@ -52,13 +52,14 @@ ${courseContext}`;
 
     if (!response.ok) {
       const status = response.status;
+      const errorBody = await response.text().catch(() => '');
       if (status === 429) {
         return { answer: 'Rate limit reached. Please wait a moment and try again.', status: 'retrieval_error', citations: [] };
       }
       if (status === 401 || status === 403) {
         return { answer: 'API key is invalid or unauthorized.', status: 'retrieval_error', citations: [] };
       }
-      return { answer: `Gemini API error (${status}). Please try again.`, status: 'retrieval_error', citations: [] };
+      return { answer: `Gemini API error (${status}): ${errorBody.slice(0, 200)}`, status: 'retrieval_error', citations: [] };
     }
 
     const data = await response.json();
