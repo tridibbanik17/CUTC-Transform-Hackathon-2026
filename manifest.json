@@ -9,6 +9,9 @@
     "scripting",
     "sidePanel"
   ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "background": {
     "service_worker": "service-worker.js",
     "type": "module"
@@ -19,8 +22,8 @@
   "content_scripts": [
     {
       "matches": [
-        "https://*.brightspace.com/*",
-        "https://*/d2l/*"
+        "https://*/*",
+        "http://*/*"
       ],
       "js": ["content-script.js"]
     }
