@@ -1,11 +1,8 @@
 // ============================================================
-// Content Script - Injected into LMS pages
-// Listens for messages from the service worker and delegates
-// to the active platform adapter for course info extraction.
+// Content Script - Injected into all pages
+// Detects LMS platform, extracts course info, and provides
+// page text + PDF URLs for indexing.
 // ============================================================
-
-// TODO: Import and use AdapterRegistry when Task 3 (platform adapter) is complete
-// import { adapterRegistry } from '@/platform';
 
 // Detect platform on page load
 let activePlatformName: string | null = null;
@@ -15,28 +12,77 @@ let detectedCourseName: string | null = null;
 function detectPlatform() {
   const url = window.location.href;
 
-  // Basic D2L Brightspace detection (will be replaced by adapter registry)
   if (url.includes('.brightspace.com') || url.includes('/d2l/')) {
     activePlatformName = 'D2L Brightspace';
 
-    // Try to extract course ID from URL pattern: /d2l/home/{courseId} or /d2l/le/lessons/{courseId}
     const courseIdMatch = url.match(/\/d2l\/(?:home|le\/(?:lessons|content))\/(\d+)/);
     detectedCourseId = courseIdMatch ? courseIdMatch[1] : null;
 
-    // Try to extract course name from page title or header
     const headerEl = document.querySelector('.d2l-page-title, .d2l-navigation-s-header-logo-area, [class*="course-name"]');
     detectedCourseName = headerEl?.textContent?.trim() ?? document.title.split(' - ')[0]?.trim() ?? null;
   }
 
-  // Notify service worker of platform detection
   chrome.runtime.sendMessage({
     type: 'CONTENT_PLATFORM_DETECTED',
     payload: { platformName: activePlatformName },
-  }).catch(() => { /* Side panel may not be open yet */ });
+  }).catch(() => {});
 }
 
-// Run detection on page load
 detectPlatform();
+
+// Find all PDF URLs on the current D2L page
+function findPdfUrls(): string[] {
+  const urls: string[] = [];
+  const pageHtml = document.documentElement.innerHTML;
+  const origin = window.location.origin;
+
+  // D2L content file URLs: /content/enforced/COURSEID/filename.pdf
+  const contentMatches = pageHtml.match(/\/content\/enforced\/[^"'\s<>]+\.pdf/gi) || [];
+  contentMatches.forEach((path) => urls.push(origin + path));
+
+  // D2L viewContent URLs
+  const viewContentMatches = pageHtml.match(/\/d2l\/le\/content\/\d+\/viewContent\/\d+\/View/gi) || [];
+  viewContentMatches.forEach((path) => urls.push(origin + path));
+
+  // Direct PDF links anywhere
+  const directPdfMatches = pageHtml.match(/https?:\/\/[^"'\s<>]+\.pdf/gi) || [];
+  directPdfMatches.forEach((url) => urls.push(url));
+
+  // Object/embed sources
+  document.querySelectorAll('object[data], embed[src]').forEach((el) => {
+    const src = (el as HTMLObjectElement).data || (el as HTMLEmbedElement).src;
+    if (src && (src.includes('.pdf') || src.includes('/content/'))) {
+      urls.push(src.startsWith('http') ? src : origin + src);
+    }
+  });
+
+  // Iframe sources that might be PDF viewers
+  document.querySelectorAll('iframe[src]').forEach((iframe) => {
+    const src = (iframe as HTMLIFrameElement).src;
+    if (src && (src.includes('.pdf') || src.includes('/content/') || src.includes('viewContent'))) {
+      urls.push(src);
+    }
+  });
+
+  return [...new Set(urls)];
+}
+
+// Get all text from page including iframes
+function getPageText(): string {
+  let text = document.body.innerText || '';
+
+  // Try same-origin iframes
+  try {
+    document.querySelectorAll('iframe').forEach((iframe) => {
+      try {
+        const doc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (doc?.body) text += '\n\n' + doc.body.innerText;
+      } catch {}
+    });
+  } catch {}
+
+  return text;
+}
 
 // Listen for messages from service worker
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -55,55 +101,25 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       break;
 
     case 'GET_ACTIVE_PLATFORM':
-      sendResponse({
-        payload: { platformName: activePlatformName },
-      });
+      sendResponse({ payload: { platformName: activePlatformName } });
       break;
 
     case 'GET_DOCUMENT_LINKS':
-      // TODO: Wire to adapter's getDocumentLinks() when Task 3 is complete
       sendResponse({ payload: { links: [] } });
       break;
 
     case 'GET_PAGE_TEXT':
-      // Extract all visible text from the current page + iframes for indexing
-      let fullText = document.body.innerText || '';
-      
-      // Also try to get text from iframes (D2L embeds content in iframes)
-      try {
-        const iframes = document.querySelectorAll('iframe');
-        for (const iframe of iframes) {
-          try {
-            const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-            if (iframeDoc?.body) {
-              fullText += '\n\n' + (iframeDoc.body.innerText || '');
-            }
-          } catch {
-            // Cross-origin iframe, skip
-          }
-        }
-      } catch {
-        // Ignore iframe access errors
-      }
-
-      // Also get text from shadow DOMs if any
-      try {
-        const allElements = document.querySelectorAll('*');
-        for (const el of allElements) {
-          if (el.shadowRoot) {
-            fullText += '\n\n' + (el.shadowRoot.textContent || '');
-          }
-        }
-      } catch {
-        // Ignore
-      }
-
-      sendResponse({ payload: { text: fullText } });
+      sendResponse({
+        payload: {
+          text: getPageText(),
+          pdfUrls: findPdfUrls(),
+        },
+      });
       break;
 
     default:
       sendResponse({ payload: null });
   }
 
-  return false; // Synchronous response
+  return false;
 });
