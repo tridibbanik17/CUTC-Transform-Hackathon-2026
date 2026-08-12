@@ -109,9 +109,10 @@ function App() {
     setIndexing(true);
     setIndexResult(null);
 
+    const cid = courseInfo?.courseId ?? 'default-course';
     const res = await sendMessage({
       type: 'START_INDEXING',
-      payload: { courseId: courseInfo?.courseId ?? 'current-page' },
+      payload: { courseId: cid },
     });
 
     setIndexing(false);
@@ -132,7 +133,7 @@ function App() {
 
     const res = await sendMessage({
       type: 'PROCESS_QUERY',
-      payload: { courseId: courseInfo?.courseId ?? 'unknown', query: query.trim() },
+      payload: { courseId: courseInfo?.courseId ?? 'default-course', query: query.trim() },
     });
 
     setQueryLoading(false);
