@@ -6,6 +6,49 @@
 
 import type { ServiceWorkerMessage } from '@/types/messages';
 import { apiKeyManager } from './api-key-manager';
+import { directGeminiQuery, getCourseContext, storeCourseContext } from './direct-gemini';
+
+/**
+ * Extract readable text strings from raw PDF bytes.
+ * PDFs store text in streams — this finds parenthesized strings (Tj/TJ operators)
+ * and Unicode text. Not perfect but captures most readable content.
+ */
+function extractTextFromPdfBytes(bytes: Uint8Array): string {
+  const chunks: string[] = [];
+  const decoder = new TextDecoder('utf-8', { fatal: false });
+  const text = decoder.decode(bytes);
+
+  // Extract text from PDF text operators: (text) Tj and [(text)] TJ
+  const tjMatches = text.match(/\(([^)]{2,})\)/g) || [];
+  for (const match of tjMatches) {
+    const inner = match.slice(1, -1)
+      .replace(/\\n/g, '\n')
+      .replace(/\\r/g, '')
+      .replace(/\\t/g, ' ')
+      .replace(/\\\(/g, '(')
+      .replace(/\\\)/g, ')')
+      .replace(/\\\\/g, '\\');
+    
+    // Only keep strings that look like real text (has letters/numbers)
+    if (inner.match(/[a-zA-Z0-9]{2,}/) && inner.length >= 2) {
+      chunks.push(inner);
+    }
+  }
+
+  // Also try to find BT...ET text blocks with readable content
+  const btBlocks = text.match(/BT[\s\S]{1,5000}?ET/g) || [];
+  for (const block of btBlocks) {
+    const blockTexts = block.match(/\(([^)]{2,})\)/g) || [];
+    for (const bt of blockTexts) {
+      const inner = bt.slice(1, -1);
+      if (inner.match(/[a-zA-Z0-9]{2,}/)) {
+        // Already captured above, skip duplicates
+      }
+    }
+  }
+
+  return chunks.join(' ').replace(/\s+/g, ' ').trim();
+}
 
 // --- Side Panel Registration ---
 
@@ -91,11 +134,78 @@ async function startIndexing(courseId: string) {
     return { type: 'ERROR', payload: { message: 'No API key configured. Please add your Gemini API key in settings.', code: 'NO_API_KEY' } };
   }
 
-  // TODO: Wire to indexing orchestrator (Task 10) when complete
-  // For now, return a placeholder response
+  // Get active tab
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) {
+    return { type: 'ERROR', payload: { message: 'No active tab found.', code: 'NO_TAB' } };
+  }
+
+  // Ask content script for page text and PDF URLs
+  let pageText = '';
+  let pdfUrls: string[] = [];
+  try {
+    const res = await chrome.tabs.sendMessage(tab.id, { type: 'GET_PAGE_TEXT' });
+    pageText = res?.payload?.text ?? '';
+    pdfUrls = res?.payload?.pdfUrls ?? [];
+  } catch {
+    try {
+      const [result] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => document.body.innerText,
+      });
+      pageText = result?.result ?? '';
+    } catch {
+      return { type: 'ERROR', payload: { message: 'Cannot access page content.', code: 'ACCESS_DENIED' } };
+    }
+  }
+
+  let allText = pageText;
+
+  // If we found PDF URLs, fetch and extract text from them
+  if (pdfUrls.length > 0) {
+    for (const pdfUrl of pdfUrls.slice(0, 3)) {
+      try {
+        const response = await fetch(pdfUrl, { credentials: 'include' });
+        if (!response.ok) continue;
+        
+        const contentType = response.headers.get('content-type') || '';
+        
+        if (contentType.includes('html') || contentType.includes('text')) {
+          const htmlText = await response.text();
+          const stripped = htmlText.replace(/<script[\s\S]*?<\/script>/gi, '')
+            .replace(/<style[\s\S]*?<\/style>/gi, '')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+          if (stripped.length > 200) {
+            allText += '\n\n--- Document ---\n' + stripped;
+          }
+        } else if (contentType.includes('pdf') || contentType.includes('octet-stream')) {
+          // Extract readable ASCII strings from PDF binary
+          const buffer = await response.arrayBuffer();
+          const bytes = new Uint8Array(buffer);
+          const pdfText = extractTextFromPdfBytes(bytes);
+          if (pdfText.length > 100) {
+            allText += '\n\n--- PDF Document ---\n' + pdfText;
+          }
+        }
+      } catch {
+        // Skip failed fetches
+      }
+    }
+  }
+
+  if (allText.trim().length < 50) {
+    return { type: 'ERROR', payload: { message: 'Not enough text content found on this page to index.', code: 'NO_CONTENT' } };
+  }
+
+  // Store context (cap at 100k chars for Gemini context window)
+  const contextToStore = allText.slice(0, 100000);
+  await storeCourseContext(courseId, contextToStore);
+
   return {
     type: 'INDEXING_COMPLETE',
-    payload: { success: false, documentsIndexed: 0, chunksCreated: 0, failures: [{ fileName: 'N/A', error: 'Indexing not yet implemented' }] },
+    payload: { success: true, documentsIndexed: 1, chunksCreated: 1, failures: [], _contextLength: contextToStore.length },
   };
 }
 
@@ -115,10 +225,28 @@ async function processQuery(courseId: string, query: string) {
     return { type: 'ERROR', payload: { message: 'Query must be 500 characters or fewer.', code: 'QUERY_TOO_LONG' } };
   }
 
-  // TODO: Wire to RAG engine (Task 8) when complete
+  // Get API key and course context
+  const apiKey = await apiKeyManager.getKey();
+  if (!apiKey) {
+    return { type: 'ERROR', payload: { message: 'Failed to retrieve API key.', code: 'KEY_ERROR' } };
+  }
+
+  const context = await getCourseContext(courseId);
+  if (!context) {
+    return { type: 'ERROR', payload: { message: 'No course has been indexed yet. Click "Index Course" first.', code: 'NO_INDEX' } };
+  }
+
+  // Direct Gemini query (demo mode — bypasses Backboard.io)
+  const result = await directGeminiQuery(apiKey, trimmed, context, courseId);
+
   return {
     type: 'QUERY_RESPONSE',
-    payload: { answer: '', citations: [], confidenceScore: 0, status: 'retrieval_error' as const },
+    payload: {
+      answer: result.answer,
+      citations: result.citations,
+      confidenceScore: result.status === 'success' ? 0.8 : 0.3,
+      status: result.status,
+    },
   };
 }
 

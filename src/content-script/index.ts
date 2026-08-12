@@ -1,11 +1,8 @@
 // ============================================================
-// Content Script - Injected into LMS pages
-// Listens for messages from the service worker and delegates
-// to the active platform adapter for course info extraction.
+// Content Script - Injected into all pages
+// Detects LMS platform, extracts course info, and provides
+// page text + PDF URLs for indexing.
 // ============================================================
-
-// TODO: Import and use AdapterRegistry when Task 3 (platform adapter) is complete
-// import { adapterRegistry } from '@/platform';
 
 // Detect platform on page load
 let activePlatformName: string | null = null;
@@ -15,28 +12,132 @@ let detectedCourseName: string | null = null;
 function detectPlatform() {
   const url = window.location.href;
 
-  // Basic D2L Brightspace detection (will be replaced by adapter registry)
   if (url.includes('.brightspace.com') || url.includes('/d2l/')) {
     activePlatformName = 'D2L Brightspace';
 
-    // Try to extract course ID from URL pattern: /d2l/home/{courseId} or /d2l/le/lessons/{courseId}
     const courseIdMatch = url.match(/\/d2l\/(?:home|le\/(?:lessons|content))\/(\d+)/);
     detectedCourseId = courseIdMatch ? courseIdMatch[1] : null;
 
-    // Try to extract course name from page title or header
     const headerEl = document.querySelector('.d2l-page-title, .d2l-navigation-s-header-logo-area, [class*="course-name"]');
     detectedCourseName = headerEl?.textContent?.trim() ?? document.title.split(' - ')[0]?.trim() ?? null;
   }
 
-  // Notify service worker of platform detection
   chrome.runtime.sendMessage({
     type: 'CONTENT_PLATFORM_DETECTED',
     payload: { platformName: activePlatformName },
-  }).catch(() => { /* Side panel may not be open yet */ });
+  }).catch(() => {});
 }
 
-// Run detection on page load
 detectPlatform();
+
+// Find all PDF URLs on the current D2L page
+function findPdfUrls(): string[] {
+  const urls: string[] = [];
+  const origin = window.location.origin;
+
+  // D2L Download button — this is the most reliable way to get the actual PDF
+  document.querySelectorAll('a[href*="Download"], a[download], button[data-download], a.d2l-button').forEach((el) => {
+    const href = (el as HTMLAnchorElement).href;
+    if (href && href.startsWith('http')) urls.push(href);
+  });
+
+  // D2L content file URLs in links
+  document.querySelectorAll('a[href*="/content/enforced/"], a[href*="/content/"], a[href*=".pdf"]').forEach((a) => {
+    const href = (a as HTMLAnchorElement).href;
+    if (href) urls.push(href);
+  });
+
+  // Look for D2L's file download pattern in page HTML
+  const pageHtml = document.documentElement.innerHTML;
+  
+  // Pattern: /d2l/le/content/COURSEID/topics/files/download/FILEID/DirectFileTopicDownload
+  const downloadMatches = pageHtml.match(/\/d2l\/le\/content\/\d+\/topics\/files\/download\/[^"'\s<>]+/gi) || [];
+  downloadMatches.forEach((path) => urls.push(origin + path));
+
+  // Pattern: /content/enforced/COURSEID-NAME/filename.pdf
+  const enforcedMatches = pageHtml.match(/\/content\/enforced\/[^"'\s<>]+\.pdf/gi) || [];
+  enforcedMatches.forEach((path) => urls.push(origin + path));
+
+  // Direct PDF links
+  const directPdfMatches = pageHtml.match(/https?:\/\/[^"'\s<>]+\.pdf[^"'\s<>]*/gi) || [];
+  directPdfMatches.forEach((url) => urls.push(url));
+
+  // D2L viewContent URL (current page might be one)
+  const currentUrl = window.location.href;
+  if (currentUrl.includes('/viewContent/') || currentUrl.includes('/topics/')) {
+    // Try to construct download URL from current page URL
+    const topicMatch = currentUrl.match(/\/d2l\/le\/content\/(\d+)\/viewContent\/(\d+)/);
+    if (topicMatch) {
+      urls.push(`${origin}/d2l/le/content/${topicMatch[1]}/topics/files/download/${topicMatch[2]}/DirectFileTopicDownload`);
+    }
+  }
+
+  return [...new Set(urls)];
+}
+
+// Get all text from page including iframes — auto-scrolls PDF viewer first
+function getPageText(): Promise<string> {
+  return new Promise((resolve) => {
+    // Find all scrollable containers on the page and scroll them
+    const scrollables: Element[] = [];
+    
+    // The D2L PDF viewer is typically in a div with overflow:auto/scroll
+    document.querySelectorAll('*').forEach((el) => {
+      const style = window.getComputedStyle(el);
+      const isScrollable = (style.overflow === 'auto' || style.overflow === 'scroll' || 
+                           style.overflowY === 'auto' || style.overflowY === 'scroll');
+      if (isScrollable && el.scrollHeight > el.clientHeight + 100) {
+        scrollables.push(el);
+      }
+    });
+
+    // Also add the main document
+    scrollables.push(document.documentElement);
+
+    let containersProcessed = 0;
+
+    function processNextContainer() {
+      if (containersProcessed >= scrollables.length) {
+        // All scrolled — now collect text
+        setTimeout(() => {
+          let text = document.body.innerText || '';
+          try {
+            document.querySelectorAll('iframe').forEach((iframe) => {
+              try {
+                const doc = iframe.contentDocument || iframe.contentWindow?.document;
+                if (doc?.body) text += '\n\n' + doc.body.innerText;
+              } catch {}
+            });
+          } catch {}
+          resolve(text);
+        }, 300);
+        return;
+      }
+
+      const container = scrollables[containersProcessed];
+      const totalHeight = container.scrollHeight;
+      const originalTop = container.scrollTop;
+      let pos = 0;
+
+      function scrollStep() {
+        if (pos < totalHeight) {
+          container.scrollTop = pos;
+          pos += 600;
+          setTimeout(scrollStep, 30);
+        } else {
+          // Restore position
+          container.scrollTop = originalTop;
+          containersProcessed++;
+          setTimeout(processNextContainer, 100);
+        }
+      }
+
+      scrollStep();
+    }
+
+    processNextContainer();
+  });
+}
 
 // Listen for messages from service worker
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -55,19 +156,28 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       break;
 
     case 'GET_ACTIVE_PLATFORM':
-      sendResponse({
-        payload: { platformName: activePlatformName },
-      });
+      sendResponse({ payload: { platformName: activePlatformName } });
       break;
 
     case 'GET_DOCUMENT_LINKS':
-      // TODO: Wire to adapter's getDocumentLinks() when Task 3 is complete
       sendResponse({ payload: { links: [] } });
       break;
+
+    case 'GET_PAGE_TEXT':
+      // Async: scroll page first, then collect text
+      getPageText().then((text) => {
+        sendResponse({
+          payload: {
+            text,
+            pdfUrls: findPdfUrls(),
+          },
+        });
+      });
+      return true; // Keep channel open for async response
 
     default:
       sendResponse({ payload: null });
   }
 
-  return false; // Synchronous response
+  return false;
 });
