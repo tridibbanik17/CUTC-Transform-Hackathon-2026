@@ -40,6 +40,8 @@ function App() {
   const [courseInfo, setCourseInfo] = useState<{ courseName: string; courseId: string } | null>(null);
 
   const [showSettings, setShowSettings] = useState(false);
+  const [indexing, setIndexing] = useState(false);
+  const [indexResult, setIndexResult] = useState<string | null>(null);
 
   // Load initial state
   useEffect(() => {
@@ -100,6 +102,27 @@ function App() {
     setHasKey(false);
     setMaskedKey(null);
     setKeySuccess('');
+  }
+
+  // Handle indexing
+  async function handleIndex() {
+    setIndexing(true);
+    setIndexResult(null);
+
+    const res = await sendMessage({
+      type: 'START_INDEXING',
+      payload: { courseId: courseInfo?.courseId ?? 'current-page' },
+    });
+
+    setIndexing(false);
+
+    if (res?.type === 'INDEXING_COMPLETE' && res.payload.success) {
+      setIndexResult(`✓ Indexed ${res.payload.documentsIndexed} document(s). Ready to answer questions!`);
+    } else if (res?.type === 'ERROR') {
+      setIndexResult(`✗ ${res.payload.message}`);
+    } else {
+      setIndexResult('✗ Indexing failed. Try navigating to a course page with content.');
+    }
   }
 
   // Handle query submission
@@ -205,6 +228,22 @@ function App() {
           <p style={{ fontSize: '12px', margin: '8px 0 0', color: '#555' }}>
             To get started, click ⚙️ above and add your free Gemini API key.
           </p>
+        </div>
+      )}
+
+      {/* Index Course Button */}
+      {hasKey && (
+        <div style={styles.section}>
+          <div style={styles.row}>
+            <button style={styles.button} onClick={handleIndex} disabled={indexing}>
+              {indexing ? '📚 Indexing...' : '📚 Index This Page'}
+            </button>
+          </div>
+          {indexResult && (
+            <div style={{ fontSize: '12px', marginTop: '6px', color: indexResult.startsWith('✓') ? '#188038' : '#d93025' }}>
+              {indexResult}
+            </div>
+          )}
         </div>
       )}
 

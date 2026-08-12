@@ -6,6 +6,7 @@
 
 import type { ServiceWorkerMessage } from '@/types/messages';
 import { apiKeyManager } from './api-key-manager';
+import { directGeminiQuery, getCourseContext, storeCourseContext } from './direct-gemini';
 
 // --- Side Panel Registration ---
 
@@ -91,11 +92,73 @@ async function startIndexing(courseId: string) {
     return { type: 'ERROR', payload: { message: 'No API key configured. Please add your Gemini API key in settings.', code: 'NO_API_KEY' } };
   }
 
-  // TODO: Wire to indexing orchestrator (Task 10) when complete
-  // For now, return a placeholder response
+  // Get document links from content script
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) {
+    return { type: 'ERROR', payload: { message: 'No active tab found.', code: 'NO_TAB' } };
+  }
+
+  let links: Array<{ url: string; fileName: string }> = [];
+  try {
+    const res = await chrome.tabs.sendMessage(tab.id, { type: 'GET_DOCUMENT_LINKS' });
+    links = res?.payload?.links ?? [];
+  } catch {
+    // Content script not available
+  }
+
+  // If no links from adapter, try to extract text from the current page directly
+  if (links.length === 0) {
+    try {
+      const [result] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => document.body.innerText,
+      });
+      const pageText = result?.result ?? '';
+      if (pageText.length > 50) {
+        await storeCourseContext(courseId, pageText.slice(0, 100000)); // Cap at 100k chars for Gemini context
+        return {
+          type: 'INDEXING_COMPLETE',
+          payload: { success: true, documentsIndexed: 1, chunksCreated: 1, failures: [] },
+        };
+      }
+    } catch {
+      // scripting permission may fail
+    }
+
+    return {
+      type: 'ERROR',
+      payload: { message: 'No documents found on this page to index.', code: 'NO_DOCUMENTS' },
+    };
+  }
+
+  // Fetch and extract text from each document link
+  let allText = '';
+  let docsIndexed = 0;
+  const failures: Array<{ fileName: string; error: string }> = [];
+
+  for (const link of links) {
+    try {
+      const response = await fetch(link.url);
+      if (!response.ok) {
+        failures.push({ fileName: link.fileName, error: `HTTP ${response.status}` });
+        continue;
+      }
+      const text = await response.text();
+      allText += `\n\n--- ${link.fileName} ---\n${text}`;
+      docsIndexed++;
+    } catch (err) {
+      failures.push({ fileName: link.fileName, error: err instanceof Error ? err.message : 'Unknown' });
+    }
+  }
+
+  if (allText.length > 0) {
+    // Cap context at 100k chars for Gemini's context window
+    await storeCourseContext(courseId, allText.slice(0, 100000));
+  }
+
   return {
     type: 'INDEXING_COMPLETE',
-    payload: { success: false, documentsIndexed: 0, chunksCreated: 0, failures: [{ fileName: 'N/A', error: 'Indexing not yet implemented' }] },
+    payload: { success: docsIndexed > 0, documentsIndexed: docsIndexed, chunksCreated: docsIndexed, failures },
   };
 }
 
@@ -115,10 +178,28 @@ async function processQuery(courseId: string, query: string) {
     return { type: 'ERROR', payload: { message: 'Query must be 500 characters or fewer.', code: 'QUERY_TOO_LONG' } };
   }
 
-  // TODO: Wire to RAG engine (Task 8) when complete
+  // Get API key and course context
+  const apiKey = await apiKeyManager.getKey();
+  if (!apiKey) {
+    return { type: 'ERROR', payload: { message: 'Failed to retrieve API key.', code: 'KEY_ERROR' } };
+  }
+
+  const context = await getCourseContext(courseId);
+  if (!context) {
+    return { type: 'ERROR', payload: { message: 'No course has been indexed yet. Click "Index Course" first.', code: 'NO_INDEX' } };
+  }
+
+  // Direct Gemini query (demo mode — bypasses Backboard.io)
+  const result = await directGeminiQuery(apiKey, trimmed, context, courseId);
+
   return {
     type: 'QUERY_RESPONSE',
-    payload: { answer: '', citations: [], confidenceScore: 0, status: 'retrieval_error' as const },
+    payload: {
+      answer: result.answer,
+      citations: result.citations,
+      confidenceScore: result.status === 'success' ? 0.8 : 0.3,
+      status: result.status,
+    },
   };
 }
 
