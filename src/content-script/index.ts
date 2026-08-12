@@ -75,21 +75,52 @@ function findPdfUrls(): string[] {
   return [...new Set(urls)];
 }
 
-// Get all text from page including iframes
-function getPageText(): string {
-  let text = document.body.innerText || '';
+// Get all text from page including iframes — auto-scrolls PDF viewer first
+function getPageText(): Promise<string> {
+  return new Promise((resolve) => {
+    // Find the PDF viewer scroll container
+    const pdfViewer = document.querySelector('#ContentView, .d2l-page-main, [class*="content-view"], .pdf-viewer, [id*="viewer"]') 
+      || document.querySelector('iframe')?.contentDocument?.querySelector('.page')?.parentElement
+      || document.documentElement;
+    
+    // Auto-scroll to load all lazy content
+    const scrollContainer = pdfViewer || document.documentElement;
+    const originalScrollTop = scrollContainer.scrollTop;
+    let totalHeight = scrollContainer.scrollHeight;
+    let currentPos = 0;
+    const scrollStep = 800;
 
-  // Try same-origin iframes
-  try {
-    document.querySelectorAll('iframe').forEach((iframe) => {
-      try {
-        const doc = iframe.contentDocument || iframe.contentWindow?.document;
-        if (doc?.body) text += '\n\n' + doc.body.innerText;
-      } catch {}
-    });
-  } catch {}
+    function scrollAndCollect() {
+      if (currentPos < totalHeight) {
+        scrollContainer.scrollTop = currentPos;
+        currentPos += scrollStep;
+        totalHeight = scrollContainer.scrollHeight; // Update in case it grows
+        setTimeout(scrollAndCollect, 50); // 50ms between scrolls
+      } else {
+        // Scroll back to top
+        scrollContainer.scrollTop = originalScrollTop;
+        
+        // Now collect all text
+        setTimeout(() => {
+          let text = document.body.innerText || '';
+          
+          // Try same-origin iframes
+          try {
+            document.querySelectorAll('iframe').forEach((iframe) => {
+              try {
+                const doc = iframe.contentDocument || iframe.contentWindow?.document;
+                if (doc?.body) text += '\n\n' + doc.body.innerText;
+              } catch {}
+            });
+          } catch {}
+          
+          resolve(text);
+        }, 200); // Wait for DOM to update after final scroll
+      }
+    }
 
-  return text;
+    scrollAndCollect();
+  });
 }
 
 // Listen for messages from service worker
@@ -117,13 +148,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       break;
 
     case 'GET_PAGE_TEXT':
-      sendResponse({
-        payload: {
-          text: getPageText(),
-          pdfUrls: findPdfUrls(),
-        },
+      // Async: scroll page first, then collect text
+      getPageText().then((text) => {
+        sendResponse({
+          payload: {
+            text,
+            pdfUrls: findPdfUrls(),
+          },
+        });
       });
-      break;
+      return true; // Keep channel open for async response
 
     default:
       sendResponse({ payload: null });
