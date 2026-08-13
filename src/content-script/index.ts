@@ -30,6 +30,109 @@ function detectPlatform() {
 
 detectPlatform();
 
+// Load PDF.js library dynamically for PDF text extraction
+async function loadPdfJsLibrary(): Promise<any> {
+  if ((window as any).pdfjsLib) {
+    return (window as any).pdfjsLib;
+  }
+
+  // Inject script into the page's main world to load PDF.js
+  return new Promise((resolve, reject) => {
+    // Create a script element in the page's DOM
+    const script = document.createElement('script');
+    script.textContent = `
+      if (!window.pdfjsLib) {
+        var s = document.createElement('script');
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.js';
+        s.onload = function() {
+          if (window.pdfjsLib) {
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.js';
+            document.dispatchEvent(new Event('pdfjs-loaded'));
+          }
+        };
+        document.head.appendChild(s);
+      } else {
+        document.dispatchEvent(new Event('pdfjs-loaded'));
+      }
+    `;
+    document.head.appendChild(script);
+    script.remove();
+
+    // Listen for the event from page context
+    const timeout = setTimeout(() => reject(new Error('PDF.js load timeout')), 10000);
+    document.addEventListener('pdfjs-loaded', () => {
+      clearTimeout(timeout);
+      // PDF.js is now in the page's window — but content script can't access it directly
+      // We need to use it from the page context via a bridge
+      resolve(true);
+    }, { once: true });
+  });
+}
+
+/**
+ * Extract PDF text by injecting extraction code into the page context.
+ * Returns text via a custom event.
+ */
+function extractPdfInPageContext(buffer: ArrayBuffer): Promise<string> {
+  return new Promise((resolve, reject) => {
+    // Convert buffer to base64 to pass to page context
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    const base64 = btoa(binary);
+
+    // Listen for result
+    const timeout = setTimeout(() => {
+      resolve(''); // Timeout — return empty, fall back to DOM text
+    }, 30000);
+
+    document.addEventListener('pdfjs-extract-result', ((e: CustomEvent) => {
+      clearTimeout(timeout);
+      resolve(e.detail || '');
+    }) as EventListener, { once: true });
+
+    // Inject extraction script into page context
+    const script = document.createElement('script');
+    script.textContent = `
+      (async function() {
+        try {
+          var base64 = "${base64}";
+          var binary = atob(base64);
+          var bytes = new Uint8Array(binary.length);
+          for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          
+          var pdf = await window.pdfjsLib.getDocument({data: bytes}).promise;
+          var allText = [];
+          
+          for (var p = 1; p <= pdf.numPages; p++) {
+            var page = await pdf.getPage(p);
+            var tc = await page.getTextContent();
+            var pageText = '';
+            var lastY = null;
+            for (var j = 0; j < tc.items.length; j++) {
+              var item = tc.items[j];
+              if (!item.str) continue;
+              var y = item.transform[5];
+              if (lastY !== null && Math.abs(y - lastY) > 2) pageText += '\\n';
+              pageText += item.str;
+              lastY = y;
+            }
+            if (pageText.trim()) allText.push('[Page ' + p + ']\\n' + pageText.trim());
+          }
+          
+          document.dispatchEvent(new CustomEvent('pdfjs-extract-result', {detail: allText.join('\\n\\n')}));
+        } catch(e) {
+          document.dispatchEvent(new CustomEvent('pdfjs-extract-result', {detail: ''}));
+        }
+      })();
+    `;
+    document.head.appendChild(script);
+    script.remove();
+  });
+}
+
 // Find all PDF URLs on the current D2L page
 function findPdfUrls(): string[] {
   const urls: string[] = [];
@@ -164,12 +267,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       break;
 
     case 'GET_PAGE_TEXT':
-      // Async: try to download the PDF directly first, fall back to page text
+      // Async: try to download the PDF directly and extract with PDF.js
       (async () => {
         const pdfUrls = findPdfUrls();
         let extractedText = '';
 
-        // Try to fetch PDF with page cookies (content script has auth)
+        // Try to fetch PDF with page cookies and extract with PDF.js
         for (const url of pdfUrls.slice(0, 2)) {
           try {
             const resp = await fetch(url, { credentials: 'same-origin' });
@@ -178,24 +281,28 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             
             if (contentType.includes('pdf') || contentType.includes('octet-stream')) {
               const buffer = await resp.arrayBuffer();
-              // Extract text from PDF binary (Tj operator strings)
-              const bytes = new Uint8Array(buffer);
-              const decoder = new TextDecoder('latin1');
-              const raw = decoder.decode(bytes);
               
-              // Find all parenthesized text strings (PDF Tj/TJ operators)
-              const matches = raw.match(/\(([^\\)]{2,})\)/g) || [];
-              const texts: string[] = [];
-              for (const m of matches) {
-                const inner = m.slice(1, -1);
-                if (inner.match(/[a-zA-Z]{2,}/) && inner.length >= 3 && inner.length < 500) {
-                  texts.push(inner);
+              // Load PDF.js into page context and extract text
+              try {
+                await loadPdfJsLibrary();
+                extractedText = await extractPdfInPageContext(buffer);
+              } catch {
+                // PDF.js failed — try crude binary extraction as fallback
+                const bytes = new Uint8Array(buffer);
+                const decoder = new TextDecoder('latin1');
+                const raw = decoder.decode(bytes);
+                const matches = raw.match(/\(([^\\)]{2,})\)/g) || [];
+                const texts: string[] = [];
+                for (const m of matches) {
+                  const inner = m.slice(1, -1);
+                  if (inner.match(/[a-zA-Z]{2,}/) && inner.length >= 3 && inner.length < 500) {
+                    texts.push(inner);
+                  }
                 }
+                if (texts.length > 10) extractedText = texts.join(' ');
               }
-              if (texts.length > 10) {
-                extractedText = texts.join(' ');
-              }
-              break; // Got PDF text, stop trying other URLs
+
+              if (extractedText.length > 100) break;
             }
           } catch {
             // Skip
