@@ -185,6 +185,70 @@ function App() {
     }
   }
 
+  // Handle file upload for indexing
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    
+    setIndexing(true);
+    setIndexResult(null);
+
+    let allText = '';
+    let filesProcessed = 0;
+
+    for (const file of Array.from(files)) {
+      try {
+        if (file.name.endsWith('.pdf')) {
+          // Use PDF.js to extract text from uploaded PDF
+          const buffer = await file.arrayBuffer();
+          const pdfjsLib = await import('pdfjs-dist');
+          pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+          const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+          
+          for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            let pageText = '';
+            let lastY: number | null = null;
+            
+            for (const item of textContent.items) {
+              if (!('str' in item)) continue;
+              const textItem = item as any;
+              const y = textItem.transform[5];
+              if (lastY !== null && Math.abs(y - lastY) > 2) pageText += '\n';
+              pageText += textItem.str;
+              lastY = y;
+            }
+            if (pageText.trim()) {
+              allText += `\n\n[${file.name} - Page ${i}]\n${pageText.trim()}`;
+            }
+          }
+          filesProcessed++;
+        } else {
+          // Text-based files — read as text
+          const text = await file.text();
+          if (text.trim().length > 0) {
+            allText += `\n\n[${file.name}]\n${text.trim()}`;
+            filesProcessed++;
+          }
+        }
+      } catch (err) {
+        console.error(`Failed to process ${file.name}:`, err);
+      }
+    }
+
+    if (allText.length > 0) {
+      // Store via service worker
+      await chrome.storage.local.set({ ['course_context_default-course']: allText.slice(0, 100000) });
+      setIndexResult(`✓ Indexed ${filesProcessed} file(s) (${allText.length} chars). Ready to answer questions!`);
+    } else {
+      setIndexResult('✗ Could not extract text from uploaded files.');
+    }
+
+    setIndexing(false);
+    e.target.value = ''; // Reset file input
+  }
+
   // Handle query submission
   async function handleQuery() {
     if (!query.trim() || query.trim().length < 3) return;
@@ -298,9 +362,21 @@ function App() {
             <button style={styles.button} onClick={handleIndex} disabled={indexing}>
               {indexing ? '📚 Indexing...' : '📚 Index This Page'}
             </button>
-            <div style={{ fontSize: '10px', color: '#888', marginTop: '4px' }}>
-              Tip: Scroll through the entire document first for best results
-            </div>
+          </div>
+          <div style={{ marginTop: '8px' }}>
+            <label style={{ ...styles.buttonSecondary, display: 'inline-block', cursor: 'pointer' }}>
+              📄 Upload PDF/File
+              <input
+                type="file"
+                accept=".pdf,.pptx,.docx,.txt,.md,.py,.java,.js,.cpp,.c,.css,.csv,.ipynb,.html,.doc,.odt,.m"
+                multiple
+                style={{ display: 'none' }}
+                onChange={handleFileUpload}
+              />
+            </label>
+          </div>
+          <div style={{ fontSize: '10px', color: '#888', marginTop: '4px' }}>
+            Tip: For PDFs, download from D2L then upload here for best results
           </div>
           {indexResult && (
             <div style={{ fontSize: '12px', marginTop: '6px', color: indexResult.startsWith('✓') ? '#188038' : '#d93025' }}>
