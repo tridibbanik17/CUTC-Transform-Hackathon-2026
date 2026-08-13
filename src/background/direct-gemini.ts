@@ -29,6 +29,7 @@ You ONLY answer questions based on the provided course materials below.
 If the answer is not found in the materials, say "I couldn't find this information in your course materials."
 Always cite which document and page/section the information comes from.
 Keep answers concise (under 300 words). Use bullet points for clarity.
+Do NOT use LaTeX notation. Use plain text with Unicode symbols for units (e.g. Ω, °C, µ, ², ³).
 
 COURSE MATERIALS:
 ${courseContext}`;
