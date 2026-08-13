@@ -163,10 +163,10 @@ async function startIndexing(courseId: string) {
   // If page text is low, try using scripting API to auto-scroll and re-extract
   if (pageText.length < 15000) {
     try {
-      const [result] = await chrome.scripting.executeScript({
+      // First scroll the main frame
+      const [mainResult] = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
         func: async () => {
-          // Find all scrollable elements and scroll them
           const scrollables: Element[] = [];
           document.querySelectorAll('*').forEach((el) => {
             if (el.scrollHeight > el.clientHeight + 100) {
@@ -177,8 +177,6 @@ async function startIndexing(courseId: string) {
               }
             }
           });
-
-          // Scroll each container
           for (const el of scrollables) {
             const orig = el.scrollTop;
             const height = el.scrollHeight;
@@ -188,21 +186,66 @@ async function startIndexing(courseId: string) {
             }
             el.scrollTop = orig;
           }
-
-          // Also scroll the main page
           const origMain = document.documentElement.scrollTop;
-          const mainHeight = document.documentElement.scrollHeight;
-          for (let pos = 0; pos < mainHeight; pos += 400) {
+          for (let pos = 0; pos < document.documentElement.scrollHeight; pos += 400) {
             document.documentElement.scrollTop = pos;
             await new Promise(r => setTimeout(r, 80));
           }
           document.documentElement.scrollTop = origMain;
-
-          await new Promise(r => setTimeout(r, 500));
-          return document.body.innerText;
+          await new Promise(r => setTimeout(r, 300));
+          return document.body.innerText || '';
         },
       });
-      const scrolledText = result?.result ?? '';
+
+      // Then scroll all sub-frames (iframes) separately
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id, allFrames: true },
+          func: async () => {
+            // Only scroll if this is NOT the top frame
+            if (window === window.top) return '';
+            const scrollables: Element[] = [];
+            document.querySelectorAll('*').forEach((el) => {
+              if (el.scrollHeight > el.clientHeight + 100) {
+                const style = window.getComputedStyle(el);
+                if (style.overflow === 'auto' || style.overflow === 'scroll' ||
+                    style.overflowY === 'auto' || style.overflowY === 'scroll') {
+                  scrollables.push(el);
+                }
+              }
+            });
+            for (const el of scrollables) {
+              const orig = el.scrollTop;
+              for (let pos = 0; pos < el.scrollHeight; pos += 300) {
+                el.scrollTop = pos;
+                await new Promise(r => setTimeout(r, 100));
+              }
+              el.scrollTop = orig;
+            }
+            // Also scroll the frame's document itself
+            const orig = document.documentElement.scrollTop;
+            for (let pos = 0; pos < document.documentElement.scrollHeight; pos += 300) {
+              document.documentElement.scrollTop = pos;
+              await new Promise(r => setTimeout(r, 100));
+            }
+            document.documentElement.scrollTop = orig;
+            return '';
+          },
+        });
+      } catch {
+        // allFrames may fail on cross-origin frames — that's OK
+      }
+
+      // Wait for renders after iframe scrolling
+      await new Promise(r => setTimeout(r, 1000));
+
+      // Now collect text from main frame
+      const [textResult] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => document.body.innerText || '',
+      });
+
+      const scrolledText = textResult?.result ?? mainResult?.result ?? '';
       if (scrolledText.length > pageText.length) {
         pageText = scrolledText;
       }
