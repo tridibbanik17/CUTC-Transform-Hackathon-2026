@@ -298,6 +298,9 @@ function App() {
             <button style={styles.button} onClick={handleIndex} disabled={indexing}>
               {indexing ? '📚 Indexing...' : '📚 Index This Page'}
             </button>
+            <div style={{ fontSize: '10px', color: '#888', marginTop: '4px' }}>
+              Tip: Scroll through the entire document first for best results
+            </div>
           </div>
           {indexResult && (
             <div style={{ fontSize: '12px', marginTop: '6px', color: indexResult.startsWith('✓') ? '#188038' : '#d93025' }}>
