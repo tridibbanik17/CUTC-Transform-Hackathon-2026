@@ -140,6 +140,28 @@ async function startIndexing(courseId: string) {
     return { type: 'ERROR', payload: { message: 'No active tab found.', code: 'NO_TAB' } };
   }
 
+  // Refresh the page to ensure clean state
+  await chrome.tabs.reload(tab.id);
+  
+  // Wait for page to fully load
+  await new Promise<void>((resolve) => {
+    const listener = (tabId: number, info: chrome.tabs.TabChangeInfo) => {
+      if (tabId === tab.id && info.status === 'complete') {
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve();
+      }
+    };
+    chrome.tabs.onUpdated.addListener(listener);
+    // Timeout after 10s in case the event doesn't fire
+    setTimeout(() => {
+      chrome.tabs.onUpdated.removeListener(listener);
+      resolve();
+    }, 10000);
+  });
+
+  // Extra wait for D2L to finish rendering dynamic content
+  await new Promise(r => setTimeout(r, 2000));
+
   // Ask content script for page text and PDF URLs
   let pageText = '';
   let pdfUrls: string[] = [];
