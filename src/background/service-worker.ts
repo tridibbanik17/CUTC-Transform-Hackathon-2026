@@ -164,52 +164,47 @@ async function startIndexing(courseId: string) {
   if (pageText.length < 15000) {
     try {
       const [result] = await chrome.scripting.executeScript({
-        target: { tabId: tab.id, allFrames: true },
+        target: { tabId: tab.id },
         func: async () => {
-          // Find all scrollable elements in THIS frame and scroll them
+          // Find all scrollable elements and scroll them
           const scrollables: Element[] = [];
           document.querySelectorAll('*').forEach((el) => {
             if (el.scrollHeight > el.clientHeight + 100) {
               const style = window.getComputedStyle(el);
               if (style.overflow === 'auto' || style.overflow === 'scroll' ||
-                  style.overflowY === 'auto' || style.overflowY === 'scroll' ||
-                  el.tagName === 'HTML') {
+                  style.overflowY === 'auto' || style.overflowY === 'scroll') {
                 scrollables.push(el);
               }
             }
           });
 
-          // Scroll each container to bottom and back
+          // Scroll each container
           for (const el of scrollables) {
             const orig = el.scrollTop;
             const height = el.scrollHeight;
-            for (let pos = 0; pos < height; pos += 300) {
+            for (let pos = 0; pos < height; pos += 400) {
               el.scrollTop = pos;
-              await new Promise(r => setTimeout(r, 150));
+              await new Promise(r => setTimeout(r, 80));
             }
-            // Wait at bottom for final render
-            await new Promise(r => setTimeout(r, 300));
-            // Scroll back
             el.scrollTop = orig;
           }
 
-          await new Promise(r => setTimeout(r, 800));
-          return document.body?.innerText || '';
+          // Also scroll the main page
+          const origMain = document.documentElement.scrollTop;
+          const mainHeight = document.documentElement.scrollHeight;
+          for (let pos = 0; pos < mainHeight; pos += 400) {
+            document.documentElement.scrollTop = pos;
+            await new Promise(r => setTimeout(r, 80));
+          }
+          document.documentElement.scrollTop = origMain;
+
+          await new Promise(r => setTimeout(r, 500));
+          return document.body.innerText;
         },
       });
-      
-      // Collect text from all frames
-      let allFrameText = '';
-      if (Array.isArray(result)) {
-        for (const r of result) {
-          if (r?.result) allFrameText += '\n' + r.result;
-        }
-      } else if (result?.result) {
-        allFrameText = result.result;
-      }
-      
-      if (allFrameText.length > pageText.length) {
-        pageText = allFrameText;
+      const scrolledText = result?.result ?? '';
+      if (scrolledText.length > pageText.length) {
+        pageText = scrolledText;
       }
     } catch {
       // Ignore scripting failures
