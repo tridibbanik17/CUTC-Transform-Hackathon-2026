@@ -107,6 +107,10 @@ async function handleMessage(
     case 'PARSE_PDF_UPLOAD':
       return parsePdfViaOffscreen((message as any).payload.base64, (message as any).payload.fileName);
 
+    case 'PARSE_PDF':
+      // This is handled by the offscreen document, not the service worker
+      return undefined;
+
     default:
       return { type: 'ERROR', payload: { message: 'Unknown message type' } };
   }
@@ -462,10 +466,13 @@ async function parsePdfViaOffscreen(base64: string, fileName: string) {
     // Already exists — that's fine
   }
 
+  // Wait a moment for the offscreen document to load PDF.js
+  await new Promise(r => setTimeout(r, 2000));
+
   // Send PDF data to offscreen document for parsing
   try {
     const result = await chrome.runtime.sendMessage({ type: 'PARSE_PDF', data: base64 });
-    if (result?.success) {
+    if (result?.success && result.text) {
       // Store the extracted text
       await storeCourseContext('default-course', result.text.slice(0, 100000));
       return { payload: { text: result.text, error: null } };
