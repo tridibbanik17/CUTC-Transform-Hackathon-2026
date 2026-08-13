@@ -199,56 +199,35 @@ function App() {
     for (const file of Array.from(files)) {
       try {
         if (file.name.endsWith('.pdf')) {
-          // Use PDF.js to extract text from uploaded PDF
+          // Extract text from PDF binary using Tj operator parsing
           const buffer = await file.arrayBuffer();
-          try {
-            const pdfjsLib = await import('pdfjs-dist');
-            pdfjsLib.GlobalWorkerOptions.workerSrc = '';
-            const loadingTask = pdfjsLib.getDocument({
-              data: new Uint8Array(buffer),
-              useWorkerFetch: false,
-              isEvalSupported: false,
-              useSystemFonts: true,
-              disableAutoFetch: true,
-            });
-            const pdf = await loadingTask.promise;
+          const bytes = new Uint8Array(buffer);
           
-            for (let i = 1; i <= pdf.numPages; i++) {
-              const page = await pdf.getPage(i);
-              const textContent = await page.getTextContent();
-              let pageText = '';
-              let lastY: number | null = null;
-            
-              for (const item of textContent.items) {
-                if (!('str' in item)) continue;
-                const textItem = item as any;
-                const y = textItem.transform[5];
-                if (lastY !== null && Math.abs(y - lastY) > 2) pageText += '\n';
-                pageText += textItem.str;
-                lastY = y;
-              }
-              if (pageText.trim()) {
-                allText += `\n\n[${file.name} - Page ${i}]\n${pageText.trim()}`;
-              }
+          // Decode as latin1 to preserve byte values
+          let raw = '';
+          const chunkSize = 65536;
+          for (let i = 0; i < bytes.length; i += chunkSize) {
+            const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
+            raw += String.fromCharCode(...chunk);
+          }
+          
+          // Extract text from PDF text operators: (text) Tj
+          const matches = raw.match(/\(([^\\)]{1,500})\)/g) || [];
+          const texts: string[] = [];
+          for (const m of matches) {
+            let inner = m.slice(1, -1);
+            inner = inner.replace(/\\n/g, '\n').replace(/\\r/g, '').replace(/\\t/g, ' ')
+              .replace(/\\\(/g, '(').replace(/\\\)/g, ')').replace(/\\\\/g, '\\');
+            if (inner.match(/[a-zA-Z]/) && inner.length >= 1) {
+              texts.push(inner);
             }
+          }
+          
+          if (texts.length > 0) {
+            allText += `\n\n[${file.name}]\n${texts.join('')}`;
             filesProcessed++;
-          } catch (pdfErr) {
-            // PDF.js failed — extract raw text strings from binary as fallback
-            const bytes = new Uint8Array(buffer);
-            const decoder = new TextDecoder('latin1');
-            const raw = decoder.decode(bytes);
-            const matches = raw.match(/\(([^\\)]{2,200})\)/g) || [];
-            const texts: string[] = [];
-            for (const m of matches) {
-              const inner = m.slice(1, -1);
-              if (inner.match(/[a-zA-Z]{2,}/) && inner.length >= 3) {
-                texts.push(inner);
-              }
-            }
-            if (texts.length > 5) {
-              allText += `\n\n[${file.name}]\n${texts.join(' ')}`;
-              filesProcessed++;
-            }
+          } else {
+            setIndexResult(`✗ PDF "${file.name}" has no extractable text (may be scanned/image-based).`);
           }
         } else {
           // Text-based files — read as text
@@ -260,19 +239,19 @@ function App() {
         }
       } catch (err) {
         console.error(`Failed to process ${file.name}:`, err);
+        setIndexResult(`✗ Error processing ${file.name}: ${err instanceof Error ? err.message : 'Unknown'}`);
       }
     }
 
     if (allText.length > 0) {
-      // Store via service worker
       await chrome.storage.local.set({ ['course_context_default-course']: allText.slice(0, 100000) });
-      setIndexResult(`✓ Indexed ${filesProcessed} file(s) (${allText.length} chars). Ready to answer questions!`);
-    } else {
+      setIndexResult(`✓ Uploaded ${filesProcessed} file(s) (${allText.length} chars). Ready to answer questions!`);
+    } else if (!indexResult) {
       setIndexResult('✗ Could not extract text from uploaded files.');
     }
 
     setIndexing(false);
-    e.target.value = ''; // Reset file input
+    e.target.value = '';
   }
 
   // Handle query submission
