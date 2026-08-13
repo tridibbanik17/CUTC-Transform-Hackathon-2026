@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
+import { FormattedAnswer } from './components/FormattedAnswer';
+import { PrivacyNotice, PRIVACY_NOTICE_SESSION_KEY } from './components/PrivacyNotice';
+import { Spinner } from './components/Spinner';
 
 // --- PDF Parser using sandboxed iframe ---
 function parsePdfInIframe(buffer: ArrayBuffer): Promise<string> {
@@ -25,44 +28,6 @@ function parsePdfInIframe(buffer: ArrayBuffer): Promise<string> {
   });
 }
 
-// --- Markdown Renderer ---
-function FormattedAnswer({ text }: { text: string }) {
-  const lines = text.split('\n');
-  const elements: React.ReactNode[] = [];
-
-  lines.forEach((line, i) => {
-    let content: React.ReactNode = line;
-    if (line.includes('**')) {
-      const parts = line.split(/\*\*(.*?)\*\*/g);
-      content = parts.map((part, j) => j % 2 === 1 ? <strong key={j}>{part}</strong> : part);
-    }
-    if (line.match(/^\s*[\*\-]\s/)) {
-      const bulletText = line.replace(/^\s*[\*\-]\s/, '');
-      let bulletContent: React.ReactNode = bulletText;
-      if (bulletText.includes('**')) {
-        const parts = bulletText.split(/\*\*(.*?)\*\*/g);
-        bulletContent = parts.map((part, j) => j % 2 === 1 ? <strong key={j}>{part}</strong> : part);
-      }
-      elements.push(<div key={i} style={{ paddingLeft: '12px', marginBottom: '4px' }}>• {bulletContent}</div>);
-      return;
-    }
-    if (line.trim() === '') { elements.push(<div key={i} style={{ height: '8px' }} />); return; }
-    if (line.startsWith('*Source:') || line.startsWith('(*') || line.startsWith('*(')) {
-      elements.push(<div key={i} style={{ fontSize: '11px', color: '#1a73e8', marginTop: '8px', fontStyle: 'italic' }}>{content}</div>);
-      return;
-    }
-    elements.push(<div key={i} style={{ marginBottom: '2px' }}>{content}</div>);
-  });
-  return <>{elements}</>;
-}
-
-// --- Loading Spinner ---
-function Spinner() {
-  return (
-    <span style={{ display: 'inline-block', width: '16px', height: '16px', border: '2px solid #e0e0e0', borderTopColor: '#1a73e8', borderRadius: '50%', animation: 'spin 0.8s linear infinite', verticalAlign: 'middle', marginRight: '8px' }} />
-  );
-}
-
 // --- App ---
 function App() {
   const [apiKey, setApiKey] = useState('');
@@ -81,6 +46,7 @@ function App() {
   const [indexResult, setIndexResult] = useState<string | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
   const [totalChars, setTotalChars] = useState(0);
+  const [privacyAcknowledged, setPrivacyAcknowledged] = useState(false);
 
   useEffect(() => {
     sendMessage({ type: 'GET_API_KEY_STATUS' }).then((res) => {
@@ -97,13 +63,25 @@ function App() {
       const ctx = r['course_context_default-course'] || '';
       if (ctx.length > 0) setTotalChars(ctx.length);
     });
+    chrome.storage.session.get(PRIVACY_NOTICE_SESSION_KEY, (result) => {
+      setPrivacyAcknowledged(Boolean(result[PRIVACY_NOTICE_SESSION_KEY]));
+    });
   }, []);
+
+  async function handleAcknowledgePrivacyNotice() {
+    await chrome.storage.session.set({ [PRIVACY_NOTICE_SESSION_KEY]: true });
+    setPrivacyAcknowledged(true);
+  }
 
   async function sendMessage(message: any): Promise<any> {
     try { return await chrome.runtime.sendMessage(message); } catch { return null; }
   }
 
   async function handleSaveKey() {
+    if (!privacyAcknowledged) {
+      setKeyError('Please acknowledge the privacy notice first.');
+      return;
+    }
     setKeyError(''); setKeySuccess(''); setKeyLoading(true);
     const res = await sendMessage({ type: 'VALIDATE_API_KEY', payload: { key: apiKey } });
     setKeyLoading(false);
@@ -157,6 +135,9 @@ function App() {
   }
 
   async function handleQuery() {
+    if (!privacyAcknowledged) {
+      return;
+    }
     if (!query.trim() || query.trim().length < 3) return;
     setQueryLoading(true);
     const res = await sendMessage({ type: 'PROCESS_QUERY', payload: { courseId: courseInfo?.courseId ?? 'default-course', query: query.trim() } });
@@ -214,12 +195,13 @@ function App() {
             <div>
               <input style={{ width: '100%', padding: '9px 12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '13px', boxSizing: 'border-box' as const }} type="password" placeholder="Paste your Gemini API key..." value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
               <div style={{ marginTop: '8px' }}>
-                <button onClick={handleSaveKey} disabled={keyLoading || !apiKey.trim()} style={{ padding: '8px 16px', background: '#1a73e8', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', cursor: 'pointer', opacity: keyLoading || !apiKey.trim() ? 0.5 : 1 }}>
+                <button onClick={handleSaveKey} disabled={keyLoading || !apiKey.trim() || !privacyAcknowledged} style={{ padding: '8px 16px', background: '#1a73e8', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', cursor: 'pointer', opacity: keyLoading || !apiKey.trim() || !privacyAcknowledged ? 0.5 : 1 }}>
                   {keyLoading ? <><Spinner /> Validating...</> : 'Save Key'}
                 </button>
               </div>
               {keyError && <div style={{ color: '#d93025', fontSize: '12px', marginTop: '6px' }}>{keyError}</div>}
               {keySuccess && <div style={{ color: '#188038', fontSize: '12px', marginTop: '6px' }}>{keySuccess}</div>}
+              {!privacyAcknowledged && <div style={{ fontSize: '11px', color: '#8a6d3b', marginTop: '8px' }}>Acknowledge the privacy notice above before saving your API key.</div>}
               <div style={{ fontSize: '11px', color: '#888', marginTop: '8px' }}>Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style={{ color: '#1a73e8' }}>Google AI Studio</a></div>
             </div>
           )}
@@ -232,6 +214,11 @@ function App() {
           <strong style={{ fontSize: '14px' }}>👋 Welcome to CourseChat!</strong>
           <p style={{ fontSize: '12px', margin: '6px 0 0', color: '#555' }}>Click ⚙️ above to add your free Gemini API key and start asking questions.</p>
         </div>
+      )}
+
+      {/* Privacy Notice */}
+      {!privacyAcknowledged && (
+        <PrivacyNotice onAcknowledge={handleAcknowledgePrivacyNotice} />
       )}
 
       {/* Upload Section */}
@@ -281,11 +268,12 @@ function App() {
             onBlur={(e) => { e.currentTarget.style.borderColor = '#e0e0e0'; }}
           />
           <div style={{ display: 'flex', marginTop: '8px', justifyContent: 'space-between', alignItems: 'center' }}>
-            <button onClick={handleQuery} disabled={queryLoading || query.trim().length < 3} style={{ padding: '10px 20px', background: queryLoading || query.trim().length < 3 ? '#a0c4f0' : '#1a73e8', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', cursor: queryLoading ? 'wait' : 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <button onClick={handleQuery} disabled={queryLoading || query.trim().length < 3 || !privacyAcknowledged} style={{ padding: '10px 20px', background: queryLoading || query.trim().length < 3 || !privacyAcknowledged ? '#a0c4f0' : '#1a73e8', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', cursor: queryLoading ? 'wait' : 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
               {queryLoading ? <><Spinner /> Thinking...</> : 'Ask'}
             </button>
             <span style={{ fontSize: '11px', color: '#999' }}>{query.length}/1000</span>
           </div>
+          {!privacyAcknowledged && <div style={{ fontSize: '11px', color: '#8a6d3b', marginTop: '8px' }}>Acknowledge the privacy notice above before asking a question.</div>}
         </div>
       )}
 
