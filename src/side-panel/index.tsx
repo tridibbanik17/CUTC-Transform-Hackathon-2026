@@ -203,7 +203,7 @@ function App() {
           const buffer = await file.arrayBuffer();
           const pdfjsLib = await import('pdfjs-dist');
           pdfjsLib.GlobalWorkerOptions.workerSrc = '';
-          const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+          const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer), useWorkerFetch: false, isEvalSupported: false, useSystemFonts: true, disableAutoFetch: true, }).promise;
           
           for (let i = 1; i <= pdf.numPages; i++) {
             const page = await pdf.getPage(i);
