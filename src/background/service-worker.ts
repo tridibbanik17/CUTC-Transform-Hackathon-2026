@@ -202,19 +202,19 @@ async function startIndexing(courseId: string) {
           for (const el of scrollables) {
             const orig = el.scrollTop;
             const height = el.scrollHeight;
-            for (let pos = 0; pos < height; pos += 200) {
+            for (let pos = 0; pos < height; pos += 500) {
               el.scrollTop = pos;
-              await new Promise(r => setTimeout(r, 200));
+              await new Promise(r => setTimeout(r, 20));
             }
             el.scrollTop = orig;
           }
           const origMain = document.documentElement.scrollTop;
-          for (let pos = 0; pos < document.documentElement.scrollHeight; pos += 200) {
+          for (let pos = 0; pos < document.documentElement.scrollHeight; pos += 500) {
             document.documentElement.scrollTop = pos;
-            await new Promise(r => setTimeout(r, 200));
+            await new Promise(r => setTimeout(r, 20));
           }
           document.documentElement.scrollTop = origMain;
-          await new Promise(r => setTimeout(r, 500));
+          await new Promise(r => setTimeout(r, 200));
           return document.body.innerText || '';
         },
       });
@@ -238,17 +238,17 @@ async function startIndexing(courseId: string) {
             });
             for (const el of scrollables) {
               const orig = el.scrollTop;
-              for (let pos = 0; pos < el.scrollHeight; pos += 200) {
+              for (let pos = 0; pos < el.scrollHeight; pos += 500) {
                 el.scrollTop = pos;
-                await new Promise(r => setTimeout(r, 250));
+                await new Promise(r => setTimeout(r, 20));
               }
               el.scrollTop = orig;
             }
             // Also scroll the frame's document itself
             const orig = document.documentElement.scrollTop;
-            for (let pos = 0; pos < document.documentElement.scrollHeight; pos += 200) {
+            for (let pos = 0; pos < document.documentElement.scrollHeight; pos += 500) {
               document.documentElement.scrollTop = pos;
-              await new Promise(r => setTimeout(r, 250));
+              await new Promise(r => setTimeout(r, 20));
             }
             document.documentElement.scrollTop = orig;
             return '';
