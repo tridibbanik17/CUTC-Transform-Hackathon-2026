@@ -253,8 +253,10 @@ function App() {
     }
 
     if (allText.length > 0) {
-      await chrome.storage.local.set({ ['course_context_default-course']: allText.slice(0, 100000) });
-      setIndexResult(`✓ Uploaded ${filesProcessed} file(s) (${allText.length} chars). Ready to answer questions!`);
+      // Cap at 80k chars (Gemini context limit)
+      const capped = allText.slice(0, 80000);
+      await chrome.storage.local.set({ ['course_context_default-course']: capped });
+      setIndexResult(`✓ Uploaded ${filesProcessed} file(s) (${capped.length} chars). Ready to answer questions!`);
     } else if (!indexResult) {
       setIndexResult('✗ Could not extract text from uploaded files.');
     }
