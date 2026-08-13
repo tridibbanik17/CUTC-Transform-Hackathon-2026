@@ -202,19 +202,19 @@ async function startIndexing(courseId: string) {
           for (const el of scrollables) {
             const orig = el.scrollTop;
             const height = el.scrollHeight;
-            for (let pos = 0; pos < height; pos += 400) {
+            for (let pos = 0; pos < height; pos += 200) {
               el.scrollTop = pos;
-              await new Promise(r => setTimeout(r, 80));
+              await new Promise(r => setTimeout(r, 200));
             }
             el.scrollTop = orig;
           }
           const origMain = document.documentElement.scrollTop;
-          for (let pos = 0; pos < document.documentElement.scrollHeight; pos += 400) {
+          for (let pos = 0; pos < document.documentElement.scrollHeight; pos += 200) {
             document.documentElement.scrollTop = pos;
-            await new Promise(r => setTimeout(r, 80));
+            await new Promise(r => setTimeout(r, 200));
           }
           document.documentElement.scrollTop = origMain;
-          await new Promise(r => setTimeout(r, 300));
+          await new Promise(r => setTimeout(r, 500));
           return document.body.innerText || '';
         },
       });
@@ -238,17 +238,17 @@ async function startIndexing(courseId: string) {
             });
             for (const el of scrollables) {
               const orig = el.scrollTop;
-              for (let pos = 0; pos < el.scrollHeight; pos += 300) {
+              for (let pos = 0; pos < el.scrollHeight; pos += 200) {
                 el.scrollTop = pos;
-                await new Promise(r => setTimeout(r, 100));
+                await new Promise(r => setTimeout(r, 250));
               }
               el.scrollTop = orig;
             }
             // Also scroll the frame's document itself
             const orig = document.documentElement.scrollTop;
-            for (let pos = 0; pos < document.documentElement.scrollHeight; pos += 300) {
+            for (let pos = 0; pos < document.documentElement.scrollHeight; pos += 200) {
               document.documentElement.scrollTop = pos;
-              await new Promise(r => setTimeout(r, 100));
+              await new Promise(r => setTimeout(r, 250));
             }
             document.documentElement.scrollTop = orig;
             return '';
@@ -259,7 +259,7 @@ async function startIndexing(courseId: string) {
       }
 
       // Wait for renders after iframe scrolling
-      await new Promise(r => setTimeout(r, 1000));
+      await new Promise(r => setTimeout(r, 2000));
 
       // Now collect text from main frame
       const [textResult] = await chrome.scripting.executeScript({
