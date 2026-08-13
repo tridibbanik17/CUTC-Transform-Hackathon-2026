@@ -253,21 +253,20 @@ function App() {
     }
 
     if (allText.length > 0) {
-      // Append to existing context (don't overwrite — build up repository)
-      const existing = await new Promise<string>((resolve) => {
-        chrome.storage.local.get('course_context_default-course', (r) => {
-          resolve(r['course_context_default-course'] || '');
-        });
-      });
-      const combined = (existing + allText).slice(0, 200000); // 200k char limit for larger repos
-      await chrome.storage.local.set({ ['course_context_default-course']: combined });
-      setIndexResult(`✓ Uploaded ${filesProcessed} file(s) (${combined.length} total chars). Ready to answer questions!`);
+      await chrome.storage.local.set({ ['course_context_default-course']: allText.slice(0, 100000) });
+      setIndexResult(`✓ Uploaded ${filesProcessed} file(s) (${allText.length} chars). Ready to answer questions!`);
     } else if (!indexResult) {
       setIndexResult('✗ Could not extract text from uploaded files.');
     }
 
     setIndexing(false);
     e.target.value = '';
+  }
+
+  // Handle clearing stored context
+  async function handleClearContext() {
+    await chrome.storage.local.remove('course_context_default-course');
+    setIndexResult('🗑️ Cleared all indexed content. Upload new files to start fresh.');
   }
 
   // Handle query submission
@@ -384,7 +383,7 @@ function App() {
               {indexing ? '📚 Indexing...' : '📚 Index This Page'}
             </button>
           </div>
-          <div style={{ marginTop: '8px' }}>
+          <div style={{ marginTop: '8px', display: 'flex', gap: '8px' }}>
             <label style={{ ...styles.buttonSecondary, display: 'inline-block', cursor: 'pointer' }}>
               📄 Upload PDF/File
               <input
@@ -395,9 +394,12 @@ function App() {
                 onChange={handleFileUpload}
               />
             </label>
+            <button style={{ ...styles.buttonSecondary, fontSize: '11px' }} onClick={handleClearContext}>
+              🗑️ Clear
+            </button>
           </div>
           <div style={{ fontSize: '10px', color: '#888', marginTop: '4px' }}>
-            Tip: For PDFs, download from D2L then upload here for best results
+            Upload multiple files to build your course repository
           </div>
           {indexResult && (
             <div style={{ fontSize: '12px', marginTop: '6px', color: indexResult.startsWith('✓') ? '#188038' : '#d93025' }}>
