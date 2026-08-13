@@ -199,35 +199,25 @@ function App() {
     for (const file of Array.from(files)) {
       try {
         if (file.name.endsWith('.pdf')) {
-          // Extract text from PDF binary using Tj operator parsing
+          // Send PDF to service worker for parsing via offscreen document
           const buffer = await file.arrayBuffer();
           const bytes = new Uint8Array(buffer);
-          
-          // Decode as latin1 to preserve byte values
-          let raw = '';
-          const chunkSize = 65536;
+          // Convert to base64
+          let binary = '';
+          const chunkSize = 8192;
           for (let i = 0; i < bytes.length; i += chunkSize) {
             const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
-            raw += String.fromCharCode(...chunk);
+            binary += String.fromCharCode(...chunk);
           }
+          const base64 = btoa(binary);
           
-          // Extract text from PDF text operators: (text) Tj
-          const matches = raw.match(/\(([^\\)]{1,500})\)/g) || [];
-          const texts: string[] = [];
-          for (const m of matches) {
-            let inner = m.slice(1, -1);
-            inner = inner.replace(/\\n/g, '\n').replace(/\\r/g, '').replace(/\\t/g, ' ')
-              .replace(/\\\(/g, '(').replace(/\\\)/g, ')').replace(/\\\\/g, '\\');
-            if (inner.match(/[a-zA-Z]/) && inner.length >= 1) {
-              texts.push(inner);
-            }
-          }
+          const result = await sendMessage({ type: 'PARSE_PDF_UPLOAD', payload: { base64, fileName: file.name } });
           
-          if (texts.length > 0) {
-            allText += `\n\n[${file.name}]\n${texts.join('')}`;
+          if (result?.payload?.text && result.payload.text.length > 0) {
+            allText += `\n\n[${file.name}]\n${result.payload.text}`;
             filesProcessed++;
           } else {
-            setIndexResult(`✗ PDF "${file.name}" has no extractable text (may be scanned/image-based).`);
+            setIndexResult(`✗ PDF "${file.name}": ${result?.payload?.error || 'No text extracted'}`);
           }
         } else {
           // Text-based files — read as text

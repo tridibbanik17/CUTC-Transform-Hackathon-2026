@@ -28,6 +28,16 @@ function copyExtensionFiles() {
           }
         }
       }
+
+      // Copy offscreen document
+      const offscreenDistDir = resolve(distDir, 'offscreen');
+      if (!existsSync(offscreenDistDir)) mkdirSync(offscreenDistDir, { recursive: true });
+      const offscreenSrcDir = resolve(__dirname, 'src/offscreen');
+      if (existsSync(offscreenSrcDir)) {
+        for (const file of readdirSync(offscreenSrcDir)) {
+          copyFileSync(resolve(offscreenSrcDir, file), resolve(offscreenDistDir, file));
+        }
+      }
     },
   };
 }

@@ -70,7 +70,7 @@ chrome.runtime.onMessage.addListener((message: ServiceWorkerMessage, sender, sen
 });
 
 async function handleMessage(
-  message: ServiceWorkerMessage,
+  message: ServiceWorkerMessage | { type: string; payload?: any },
   _sender: chrome.runtime.MessageSender
 ) {
   switch (message.type) {
@@ -103,6 +103,9 @@ async function handleMessage(
 
     case 'GET_API_KEY_STATUS':
       return getApiKeyStatus();
+
+    case 'PARSE_PDF_UPLOAD':
+      return parsePdfViaOffscreen((message as any).payload.base64, (message as any).payload.fileName);
 
     default:
       return { type: 'ERROR', payload: { message: 'Unknown message type' } };
@@ -445,4 +448,31 @@ async function getApiKeyStatus() {
     type: 'API_KEY_STATUS_RESPONSE',
     payload: { hasKey, maskedKey },
   };
+}
+
+async function parsePdfViaOffscreen(base64: string, fileName: string) {
+  // Create offscreen document if it doesn't exist
+  try {
+    await chrome.offscreen.createDocument({
+      url: 'offscreen/offscreen.html',
+      reasons: [chrome.offscreen.Reason.DOM_PARSER],
+      justification: 'Parse PDF text with PDF.js',
+    });
+  } catch {
+    // Already exists — that's fine
+  }
+
+  // Send PDF data to offscreen document for parsing
+  try {
+    const result = await chrome.runtime.sendMessage({ type: 'PARSE_PDF', data: base64 });
+    if (result?.success) {
+      // Store the extracted text
+      await storeCourseContext('default-course', result.text.slice(0, 100000));
+      return { payload: { text: result.text, error: null } };
+    } else {
+      return { payload: { text: '', error: result?.error || 'PDF parsing failed' } };
+    }
+  } catch (err) {
+    return { payload: { text: '', error: err instanceof Error ? err.message : 'Unknown error' } };
+  }
 }
