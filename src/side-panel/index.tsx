@@ -201,29 +201,55 @@ function App() {
         if (file.name.endsWith('.pdf')) {
           // Use PDF.js to extract text from uploaded PDF
           const buffer = await file.arrayBuffer();
-          const pdfjsLib = await import('pdfjs-dist');
-          pdfjsLib.GlobalWorkerOptions.workerSrc = '';
-          const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer), useWorkerFetch: false, isEvalSupported: false, useSystemFonts: true, disableAutoFetch: true, }).promise;
+          try {
+            const pdfjsLib = await import('pdfjs-dist');
+            pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+            const loadingTask = pdfjsLib.getDocument({
+              data: new Uint8Array(buffer),
+              useWorkerFetch: false,
+              isEvalSupported: false,
+              useSystemFonts: true,
+              disableAutoFetch: true,
+            });
+            const pdf = await loadingTask.promise;
           
-          for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const textContent = await page.getTextContent();
-            let pageText = '';
-            let lastY: number | null = null;
+            for (let i = 1; i <= pdf.numPages; i++) {
+              const page = await pdf.getPage(i);
+              const textContent = await page.getTextContent();
+              let pageText = '';
+              let lastY: number | null = null;
             
-            for (const item of textContent.items) {
-              if (!('str' in item)) continue;
-              const textItem = item as any;
-              const y = textItem.transform[5];
-              if (lastY !== null && Math.abs(y - lastY) > 2) pageText += '\n';
-              pageText += textItem.str;
-              lastY = y;
+              for (const item of textContent.items) {
+                if (!('str' in item)) continue;
+                const textItem = item as any;
+                const y = textItem.transform[5];
+                if (lastY !== null && Math.abs(y - lastY) > 2) pageText += '\n';
+                pageText += textItem.str;
+                lastY = y;
+              }
+              if (pageText.trim()) {
+                allText += `\n\n[${file.name} - Page ${i}]\n${pageText.trim()}`;
+              }
             }
-            if (pageText.trim()) {
-              allText += `\n\n[${file.name} - Page ${i}]\n${pageText.trim()}`;
+            filesProcessed++;
+          } catch (pdfErr) {
+            // PDF.js failed — extract raw text strings from binary as fallback
+            const bytes = new Uint8Array(buffer);
+            const decoder = new TextDecoder('latin1');
+            const raw = decoder.decode(bytes);
+            const matches = raw.match(/\(([^\\)]{2,200})\)/g) || [];
+            const texts: string[] = [];
+            for (const m of matches) {
+              const inner = m.slice(1, -1);
+              if (inner.match(/[a-zA-Z]{2,}/) && inner.length >= 3) {
+                texts.push(inner);
+              }
+            }
+            if (texts.length > 5) {
+              allText += `\n\n[${file.name}]\n${texts.join(' ')}`;
+              filesProcessed++;
             }
           }
-          filesProcessed++;
         } else {
           // Text-based files — read as text
           const text = await file.text();
