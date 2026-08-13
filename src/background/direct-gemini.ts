@@ -26,7 +26,8 @@ export async function directGeminiQuery(
 ): Promise<DirectQueryResult> {
   const systemPrompt = `You are CourseChat, an AI study tutor for the course "${courseName}". 
 You ONLY answer questions based on the provided course materials below. 
-If the answer is not found in the materials, say "I couldn't find this information in your course materials."
+If the answer is clearly not in the materials at all, say "I couldn't find this information in your course materials."
+However, if the question is related to topics in the materials, answer it even if the exact wording doesn't match. Be helpful, not overly strict.
 Always cite which document and page/section the information comes from.
 Keep answers concise (under 300 words). Use bullet points for clarity.
 Do NOT use LaTeX notation. Use plain text with Unicode symbols for units (e.g. Ω, °C, µ, ², ³).
@@ -46,7 +47,7 @@ ${courseContext}`;
         ],
         generationConfig: {
           maxOutputTokens: 8192,
-          temperature: 1,
+          temperature: 0.2,
         },
       }),
     });
