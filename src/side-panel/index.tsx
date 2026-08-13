@@ -23,6 +23,68 @@ const styles = {
   row: { display: 'flex', gap: '8px', alignItems: 'center' } as React.CSSProperties,
 };
 
+// --- PDF Parser using hidden iframe ---
+function parsePdfInIframe(buffer: ArrayBuffer): Promise<string> {
+  return new Promise((resolve) => {
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.srcdoc = `
+      <html><head>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.js"><\/script>
+      </head><body><script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.js';
+        window.addEventListener('message', async function(e) {
+          if (e.data.type !== 'parse-pdf') return;
+          try {
+            var bytes = new Uint8Array(e.data.buffer);
+            var pdf = await pdfjsLib.getDocument({data: bytes}).promise;
+            var pages = [];
+            for (var i = 1; i <= pdf.numPages; i++) {
+              var page = await pdf.getPage(i);
+              var tc = await page.getTextContent();
+              var text = '';
+              var lastY = null;
+              for (var j = 0; j < tc.items.length; j++) {
+                var item = tc.items[j];
+                if (!item.str) continue;
+                var y = item.transform[5];
+                if (lastY !== null && Math.abs(y - lastY) > 2) text += '\\n';
+                text += item.str;
+                lastY = y;
+              }
+              if (text.trim()) pages.push('[Page ' + i + ']\\n' + text.trim());
+            }
+            parent.postMessage({type: 'pdf-result', text: pages.join('\\n\\n')}, '*');
+          } catch(err) {
+            parent.postMessage({type: 'pdf-result', text: '', error: err.message}, '*');
+          }
+        });
+        parent.postMessage({type: 'pdf-ready'}, '*');
+      <\/script></body></html>
+    `;
+
+    const timeout = setTimeout(() => {
+      iframe.remove();
+      resolve('');
+    }, 30000);
+
+    function onMessage(e: MessageEvent) {
+      if (e.data.type === 'pdf-ready') {
+        // Send the PDF buffer to the iframe
+        iframe.contentWindow?.postMessage({ type: 'parse-pdf', buffer: buffer }, '*', [buffer]);
+      } else if (e.data.type === 'pdf-result') {
+        clearTimeout(timeout);
+        window.removeEventListener('message', onMessage);
+        iframe.remove();
+        resolve(e.data.text || '');
+      }
+    }
+
+    window.addEventListener('message', onMessage);
+    document.body.appendChild(iframe);
+  });
+}
+
 // --- Simple Markdown Renderer ---
 function FormattedAnswer({ text }: { text: string }) {
   // Convert basic markdown to HTML-like rendering
@@ -199,25 +261,14 @@ function App() {
     for (const file of Array.from(files)) {
       try {
         if (file.name.endsWith('.pdf')) {
-          // Send PDF to service worker for parsing via offscreen document
+          // Parse PDF using an iframe with PDF.js
           const buffer = await file.arrayBuffer();
-          const bytes = new Uint8Array(buffer);
-          // Convert to base64
-          let binary = '';
-          const chunkSize = 8192;
-          for (let i = 0; i < bytes.length; i += chunkSize) {
-            const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
-            binary += String.fromCharCode(...chunk);
-          }
-          const base64 = btoa(binary);
-          
-          const result = await sendMessage({ type: 'PARSE_PDF_UPLOAD', payload: { base64, fileName: file.name } });
-          
-          if (result?.payload?.text && result.payload.text.length > 0) {
-            allText += `\n\n[${file.name}]\n${result.payload.text}`;
+          const text = await parsePdfInIframe(buffer);
+          if (text.length > 0) {
+            allText += `\n\n[${file.name}]\n${text}`;
             filesProcessed++;
           } else {
-            setIndexResult(`✗ PDF "${file.name}": ${result?.payload?.error || 'No text extracted'}`);
+            setIndexResult(`✗ PDF "${file.name}" could not be parsed.`);
           }
         } else {
           // Text-based files — read as text
