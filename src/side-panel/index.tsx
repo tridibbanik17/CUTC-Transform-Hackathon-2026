@@ -250,7 +250,7 @@ function App() {
           {/* Files indexed counter */}
           {hasContent && (
             <div style={{ marginTop: '8px', padding: '8px 12px', background: '#e8f5e9', borderRadius: '8px', fontSize: '12px', color: '#2e7d32' }}>
-              📚 {uploadedFiles.length} file{uploadedFiles.length !== 1 ? 's' : ''} | {(totalChars / 1000).toFixed(1)}k chars indexed
+              📚 {uploadedFiles.length > 0 ? `${uploadedFiles.length} file${uploadedFiles.length !== 1 ? 's' : ''}` : 'Content ready'} | {(totalChars / 1000).toFixed(1)}k chars indexed
             </div>
           )}
 
