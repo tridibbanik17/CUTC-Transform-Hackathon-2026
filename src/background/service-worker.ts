@@ -161,15 +161,15 @@ async function startIndexing(courseId: string) {
   }
 
   // If page text is low, try using scripting API to auto-scroll and re-extract
-  if (pageText.length < 5000) {
+  if (pageText.length < 15000) {
     try {
       const [result] = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
+        target: { tabId: tab.id, allFrames: true },
         func: async () => {
-          // Find all scrollable elements and scroll them fully
+          // Find all scrollable elements in THIS frame and scroll them
           const scrollables: Element[] = [];
           document.querySelectorAll('*').forEach((el) => {
-            if (el.scrollHeight > el.clientHeight + 200) {
+            if (el.scrollHeight > el.clientHeight + 100) {
               const style = window.getComputedStyle(el);
               if (style.overflow === 'auto' || style.overflow === 'scroll' ||
                   style.overflowY === 'auto' || style.overflowY === 'scroll' ||
@@ -183,20 +183,31 @@ async function startIndexing(courseId: string) {
           for (const el of scrollables) {
             const orig = el.scrollTop;
             const height = el.scrollHeight;
-            for (let pos = 0; pos < height; pos += 500) {
+            for (let pos = 0; pos < height; pos += 400) {
               el.scrollTop = pos;
-              await new Promise(r => setTimeout(r, 30));
+              await new Promise(r => setTimeout(r, 50));
             }
+            // Scroll back
             el.scrollTop = orig;
           }
 
           await new Promise(r => setTimeout(r, 500));
-          return document.body.innerText;
+          return document.body?.innerText || '';
         },
       });
-      const scrolledText = result?.result ?? '';
-      if (scrolledText.length > pageText.length) {
-        pageText = scrolledText;
+      
+      // Collect text from all frames
+      let allFrameText = '';
+      if (Array.isArray(result)) {
+        for (const r of result) {
+          if (r?.result) allFrameText += '\n' + r.result;
+        }
+      } else if (result?.result) {
+        allFrameText = result.result;
+      }
+      
+      if (allFrameText.length > pageText.length) {
+        pageText = allFrameText;
       }
     } catch {
       // Ignore scripting failures
