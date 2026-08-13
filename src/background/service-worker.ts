@@ -259,7 +259,7 @@ async function startIndexing(courseId: string) {
       }
 
       // Wait for renders after iframe scrolling
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise(r => setTimeout(r, 500));
 
       // Now collect text from main frame
       const [textResult] = await chrome.scripting.executeScript({
