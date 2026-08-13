@@ -30,41 +30,47 @@ function detectPlatform() {
 
 detectPlatform();
 
-// Load PDF.js library dynamically for PDF text extraction
-async function loadPdfJsLibrary(): Promise<any> {
-  if ((window as any).pdfjsLib) {
-    return (window as any).pdfjsLib;
-  }
-
-  // Inject script into the page's main world to load PDF.js
+// Load PDF.js — try to use D2L's existing instance first, then CDN fallback
+async function loadPdfJsLibrary(): Promise<void> {
   return new Promise((resolve, reject) => {
-    // Create a script element in the page's DOM
-    const script = document.createElement('script');
-    script.textContent = `
-      if (!window.pdfjsLib) {
-        var s = document.createElement('script');
-        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.js';
-        s.onload = function() {
-          if (window.pdfjsLib) {
-            window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.js';
-            document.dispatchEvent(new Event('pdfjs-loaded'));
-          }
-        };
-        document.head.appendChild(s);
-      } else {
-        document.dispatchEvent(new Event('pdfjs-loaded'));
-      }
+    // First check if pdfjsLib already exists (D2L loads it for their viewer)
+    const checkScript = document.createElement('script');
+    checkScript.textContent = `
+      (function() {
+        if (window.pdfjsLib) {
+          document.dispatchEvent(new Event('pdfjs-loaded'));
+        } else {
+          // Try loading from CDN
+          var s = document.createElement('script');
+          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.js';
+          s.onload = function() {
+            if (window.pdfjsLib) {
+              window.pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+              document.dispatchEvent(new Event('pdfjs-loaded'));
+            } else {
+              document.dispatchEvent(new Event('pdfjs-failed'));
+            }
+          };
+          s.onerror = function() {
+            document.dispatchEvent(new Event('pdfjs-failed'));
+          };
+          document.head.appendChild(s);
+        }
+      })();
     `;
-    document.head.appendChild(script);
-    script.remove();
+    document.head.appendChild(checkScript);
+    checkScript.remove();
 
-    // Listen for the event from page context
-    const timeout = setTimeout(() => reject(new Error('PDF.js load timeout')), 10000);
+    const timeout = setTimeout(() => reject(new Error('PDF.js load timeout')), 15000);
+    
     document.addEventListener('pdfjs-loaded', () => {
       clearTimeout(timeout);
-      // PDF.js is now in the page's window — but content script can't access it directly
-      // We need to use it from the page context via a bridge
-      resolve(true);
+      resolve();
+    }, { once: true });
+    
+    document.addEventListener('pdfjs-failed', () => {
+      clearTimeout(timeout);
+      reject(new Error('PDF.js failed to load'));
     }, { once: true });
   });
 }
@@ -74,36 +80,48 @@ async function loadPdfJsLibrary(): Promise<any> {
  * Returns text via a custom event.
  */
 function extractPdfInPageContext(buffer: ArrayBuffer): Promise<string> {
-  return new Promise((resolve, reject) => {
-    // Convert buffer to base64 to pass to page context
+  return new Promise((resolve) => {
     const bytes = new Uint8Array(buffer);
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) {
-      binary += String.fromCharCode(bytes[i]);
+    
+    // Store the PDF data in a hidden element (avoids inline script size limits)
+    const dataEl = document.createElement('input');
+    dataEl.type = 'hidden';
+    dataEl.id = '__coursechat_pdf_data';
+    // Convert to base64 in chunks to avoid stack overflow
+    let base64 = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.subarray(i, i + chunkSize);
+      base64 += String.fromCharCode.apply(null, Array.from(chunk));
     }
-    const base64 = btoa(binary);
+    dataEl.value = btoa(base64);
+    document.body.appendChild(dataEl);
 
     // Listen for result
     const timeout = setTimeout(() => {
-      resolve(''); // Timeout — return empty, fall back to DOM text
-    }, 30000);
+      dataEl.remove();
+      resolve('');
+    }, 60000);
 
     document.addEventListener('pdfjs-extract-result', ((e: CustomEvent) => {
       clearTimeout(timeout);
+      dataEl.remove();
       resolve(e.detail || '');
     }) as EventListener, { once: true });
 
-    // Inject extraction script into page context
+    // Inject extraction script
     const script = document.createElement('script');
     script.textContent = `
       (async function() {
         try {
-          var base64 = "${base64}";
+          var dataEl = document.getElementById('__coursechat_pdf_data');
+          if (!dataEl) { document.dispatchEvent(new CustomEvent('pdfjs-extract-result', {detail: ''})); return; }
+          var base64 = dataEl.value;
           var binary = atob(base64);
           var bytes = new Uint8Array(binary.length);
           for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
           
-          var pdf = await window.pdfjsLib.getDocument({data: bytes}).promise;
+          var pdf = await window.pdfjsLib.getDocument({data: bytes, disableWorker: true}).promise;
           var allText = [];
           
           for (var p = 1; p <= pdf.numPages; p++) {
@@ -124,7 +142,7 @@ function extractPdfInPageContext(buffer: ArrayBuffer): Promise<string> {
           
           document.dispatchEvent(new CustomEvent('pdfjs-extract-result', {detail: allText.join('\\n\\n')}));
         } catch(e) {
-          document.dispatchEvent(new CustomEvent('pdfjs-extract-result', {detail: ''}));
+          document.dispatchEvent(new CustomEvent('pdfjs-extract-result', {detail: 'ERROR:' + e.message}));
         }
       })();
     `;
