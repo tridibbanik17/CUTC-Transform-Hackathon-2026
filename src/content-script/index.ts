@@ -164,15 +164,65 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       break;
 
     case 'GET_PAGE_TEXT':
-      // Async: scroll page first, then collect text
-      getPageText().then((text) => {
+      // Async: try to download the PDF directly first, fall back to page text
+      (async () => {
+        const pdfUrls = findPdfUrls();
+        let extractedText = '';
+
+        // Try to fetch PDF with page cookies (content script has auth)
+        for (const url of pdfUrls.slice(0, 2)) {
+          try {
+            const resp = await fetch(url, { credentials: 'same-origin' });
+            if (!resp.ok) continue;
+            const contentType = resp.headers.get('content-type') || '';
+            
+            if (contentType.includes('pdf') || contentType.includes('octet-stream')) {
+              const buffer = await resp.arrayBuffer();
+              // Extract text from PDF binary (Tj operator strings)
+              const bytes = new Uint8Array(buffer);
+              const decoder = new TextDecoder('latin1');
+              const raw = decoder.decode(bytes);
+              
+              // Find all parenthesized text strings (PDF Tj/TJ operators)
+              const matches = raw.match(/\(([^\\)]{2,})\)/g) || [];
+              const texts: string[] = [];
+              for (const m of matches) {
+                const inner = m.slice(1, -1);
+                if (inner.match(/[a-zA-Z]{2,}/) && inner.length >= 3 && inner.length < 500) {
+                  texts.push(inner);
+                }
+              }
+              if (texts.length > 10) {
+                extractedText = texts.join(' ');
+              }
+              break; // Got PDF text, stop trying other URLs
+            }
+          } catch {
+            // Skip
+          }
+        }
+
+        // Fall back to page DOM text
+        let pageText = document.body.innerText || '';
+        try {
+          document.querySelectorAll('iframe').forEach((iframe) => {
+            try {
+              const doc = iframe.contentDocument || iframe.contentWindow?.document;
+              if (doc?.body) pageText += '\n\n' + doc.body.innerText;
+            } catch {}
+          });
+        } catch {}
+
+        // Use whichever is longer
+        const finalText = extractedText.length > pageText.length ? extractedText : pageText;
+
         sendResponse({
           payload: {
-            text,
-            pdfUrls: findPdfUrls(),
+            text: finalText,
+            pdfUrls,
           },
         });
-      });
+      })();
       return true; // Keep channel open for async response
 
     default:
