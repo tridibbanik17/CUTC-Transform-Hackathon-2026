@@ -38,6 +38,16 @@ function copyExtensionFiles() {
           copyFileSync(resolve(offscreenSrcDir, file), resolve(offscreenDistDir, file));
         }
       }
+
+      // Copy pdf-parser
+      const pdfParserDistDir = resolve(distDir, 'pdf-parser');
+      if (!existsSync(pdfParserDistDir)) mkdirSync(pdfParserDistDir, { recursive: true });
+      const pdfParserSrcDir = resolve(__dirname, 'src/pdf-parser');
+      if (existsSync(pdfParserSrcDir)) {
+        for (const file of readdirSync(pdfParserSrcDir)) {
+          copyFileSync(resolve(pdfParserSrcDir, file), resolve(pdfParserDistDir, file));
+        }
+      }
     },
   };
 }

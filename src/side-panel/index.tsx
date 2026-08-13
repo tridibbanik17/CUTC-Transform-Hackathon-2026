@@ -28,40 +28,7 @@ function parsePdfInIframe(buffer: ArrayBuffer): Promise<string> {
   return new Promise((resolve) => {
     const iframe = document.createElement('iframe');
     iframe.style.display = 'none';
-    iframe.srcdoc = `
-      <html><head>
-      <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.js"><\/script>
-      </head><body><script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.js';
-        window.addEventListener('message', async function(e) {
-          if (e.data.type !== 'parse-pdf') return;
-          try {
-            var bytes = new Uint8Array(e.data.buffer);
-            var pdf = await pdfjsLib.getDocument({data: bytes}).promise;
-            var pages = [];
-            for (var i = 1; i <= pdf.numPages; i++) {
-              var page = await pdf.getPage(i);
-              var tc = await page.getTextContent();
-              var text = '';
-              var lastY = null;
-              for (var j = 0; j < tc.items.length; j++) {
-                var item = tc.items[j];
-                if (!item.str) continue;
-                var y = item.transform[5];
-                if (lastY !== null && Math.abs(y - lastY) > 2) text += '\\n';
-                text += item.str;
-                lastY = y;
-              }
-              if (text.trim()) pages.push('[Page ' + i + ']\\n' + text.trim());
-            }
-            parent.postMessage({type: 'pdf-result', text: pages.join('\\n\\n')}, '*');
-          } catch(err) {
-            parent.postMessage({type: 'pdf-result', text: '', error: err.message}, '*');
-          }
-        });
-        parent.postMessage({type: 'pdf-ready'}, '*');
-      <\/script></body></html>
-    `;
+    iframe.src = chrome.runtime.getURL('pdf-parser/index.html');
 
     const timeout = setTimeout(() => {
       iframe.remove();
@@ -70,8 +37,9 @@ function parsePdfInIframe(buffer: ArrayBuffer): Promise<string> {
 
     function onMessage(e: MessageEvent) {
       if (e.data.type === 'pdf-ready') {
-        // Send the PDF buffer to the iframe
-        iframe.contentWindow?.postMessage({ type: 'parse-pdf', buffer: buffer }, '*', [buffer]);
+        // Send a copy of the PDF buffer to the iframe
+        const copy = buffer.slice(0);
+        iframe.contentWindow?.postMessage({ type: 'parse-pdf', buffer: copy }, '*');
       } else if (e.data.type === 'pdf-result') {
         clearTimeout(timeout);
         window.removeEventListener('message', onMessage);
