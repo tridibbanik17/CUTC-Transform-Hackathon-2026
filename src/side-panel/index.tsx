@@ -253,8 +253,15 @@ function App() {
     }
 
     if (allText.length > 0) {
-      await chrome.storage.local.set({ ['course_context_default-course']: allText.slice(0, 100000) });
-      setIndexResult(`✓ Uploaded ${filesProcessed} file(s) (${allText.length} chars). Ready to answer questions!`);
+      // Append to existing context (don't overwrite — build up repository)
+      const existing = await new Promise<string>((resolve) => {
+        chrome.storage.local.get('course_context_default-course', (r) => {
+          resolve(r['course_context_default-course'] || '');
+        });
+      });
+      const combined = (existing + allText).slice(0, 200000); // 200k char limit for larger repos
+      await chrome.storage.local.set({ ['course_context_default-course']: combined });
+      setIndexResult(`✓ Uploaded ${filesProcessed} file(s) (${combined.length} total chars). Ready to answer questions!`);
     } else if (!indexResult) {
       setIndexResult('✗ Could not extract text from uploaded files.');
     }
