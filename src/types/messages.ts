@@ -16,8 +16,20 @@ export interface StartIndexingMessage {
   payload: { courseId: string };
 }
 
+/** Alias of `START_INDEXING`, kept for callers using the "INDEX_PAGE" naming. */
+export interface IndexPageMessage {
+  type: 'INDEX_PAGE';
+  payload: { courseId: string };
+}
+
 export interface ProcessQueryMessage {
   type: 'PROCESS_QUERY';
+  payload: { courseId: string; query: string };
+}
+
+/** Alias of `PROCESS_QUERY`, kept for callers using the "ASK_QUESTION" naming. */
+export interface AskQuestionMessage {
+  type: 'ASK_QUESTION';
   payload: { courseId: string; query: string };
 }
 
@@ -56,7 +68,9 @@ export interface GetApiKeyStatusMessage {
 export type ServiceWorkerMessage =
   | GetCourseInfoMessage
   | StartIndexingMessage
+  | IndexPageMessage
   | ProcessQueryMessage
+  | AskQuestionMessage
   | GetIndexStatusMessage
   | DeleteCourseDataMessage
   | ReIndexMessage

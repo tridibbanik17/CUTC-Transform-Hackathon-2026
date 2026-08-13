@@ -10,7 +10,13 @@
     "sidePanel"
   ],
   "host_permissions": [
-    "<all_urls>"
+    "<all_urls>",
+    "https://*.instructure.com/*",
+    "https://classroom.google.com/*",
+    "*://*/*moodle*/*",
+    "https://*.blackboard.com/*",
+    "*://*/webapps/blackboard/*",
+    "*://*/ultra/courses/*"
   ],
   "background": {
     "service_worker": "service-worker.js",
@@ -23,7 +29,13 @@
     {
       "matches": [
         "https://*/*",
-        "http://*/*"
+        "http://*/*",
+        "https://*.instructure.com/*",
+        "https://classroom.google.com/*",
+        "*://*/*moodle*/*",
+        "https://*.blackboard.com/*",
+        "*://*/webapps/blackboard/*",
+        "*://*/ultra/courses/*"
       ],
       "js": ["content-script.js"]
     }

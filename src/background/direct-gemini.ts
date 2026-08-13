@@ -5,8 +5,11 @@
 // Will be replaced by full RAG pipeline when Backboard.io is wired.
 // ============================================================
 
+import { fetchWithTimeout, FetchTimeoutError } from '@/shared/fetch-with-timeout';
+
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const MODEL = 'gemini-3.5-flash-lite';
+const GEMINI_QUERY_TIMEOUT_MS = 30000;
 
 interface DirectQueryResult {
   answer: string;
@@ -36,19 +39,23 @@ ${courseContext}`;
   const url = `${GEMINI_API_BASE}/${MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
   try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [
-          { role: 'user', parts: [{ text: `${systemPrompt}\n\nSTUDENT QUESTION: ${query}` }] }
-        ],
-        generationConfig: {
-          maxOutputTokens: 8192,
-          temperature: 1,
-        },
-      }),
-    });
+    const response = await fetchWithTimeout(
+      url,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            { role: 'user', parts: [{ text: `${systemPrompt}\n\nSTUDENT QUESTION: ${query}` }] }
+          ],
+          generationConfig: {
+            maxOutputTokens: 8192,
+            temperature: 1,
+          },
+        }),
+      },
+      GEMINI_QUERY_TIMEOUT_MS
+    );
 
     if (!response.ok) {
       const status = response.status;
@@ -77,6 +84,13 @@ ${courseContext}`;
 
     return { answer: text, status: 'success', citations };
   } catch (err) {
+    if (err instanceof FetchTimeoutError) {
+      return {
+        answer: 'The AI request timed out. Please check your connection and try again.',
+        status: 'retrieval_error',
+        citations: [],
+      };
+    }
     return {
       answer: `Network error: ${err instanceof Error ? err.message : 'Unknown'}`,
       status: 'retrieval_error',

@@ -101,15 +101,17 @@ function App() {
   const [indexing, setIndexing] = useState(false);
   const [indexResult, setIndexResult] = useState<string | null>(null);
 
-  // Load initial state
-  useEffect(() => {
-    sendMessage({ type: 'GET_API_KEY_STATUS' }).then((res) => {
-      if (res?.payload) {
-        setHasKey(res.payload.hasKey);
-        setMaskedKey(res.payload.maskedKey);
-      }
-    });
+  // Surfaces connection/timeout/unexpected failures that aren't tied to a
+  // specific answer bubble (e.g. a dropped message channel, or the service
+  // worker becoming unreachable) so the user always sees *something*
+  // instead of the UI silently doing nothing.
+  const [connectionError, setConnectionError] = useState<string | null>(null);
 
+  // Refresh platform + course info from the active tab's content script.
+  // Shared by the initial mount load and the live CONTENT_PLATFORM_DETECTED
+  // push listener below, so both cold-load and real-time updates go through
+  // the same code path.
+  function refreshPlatformAndCourseInfo() {
     sendMessage({ type: 'GET_ACTIVE_PLATFORM' }).then((res) => {
       if (res?.payload) {
         setPlatform(res.payload.platformName);
@@ -117,17 +119,54 @@ function App() {
     });
 
     sendMessage({ type: 'GET_COURSE_INFO' }).then((res) => {
+      setCourseInfo(res?.payload ?? null);
+    });
+  }
+
+  // Load initial state
+  useEffect(() => {
+    sendMessage({ type: 'GET_API_KEY_STATUS' }).then((res) => {
+      if (res === null) {
+        setConnectionError('Could not reach the extension background service. Try reopening the side panel.');
+        return;
+      }
       if (res?.payload) {
-        setCourseInfo(res.payload);
+        setHasKey(res.payload.hasKey);
+        setMaskedKey(res.payload.maskedKey);
       }
     });
+
+    refreshPlatformAndCourseInfo();
+
+    // Listen for the content script's immediate CONTENT_PLATFORM_DETECTED
+    // push (sent whenever the page finishes loading or the URL changes via
+    // SPA navigation) so the side panel updates in real time instead of
+    // staying stuck on its last-known state — previously the panel only
+    // ever checked platform/course info once, on initial mount.
+    function handleRuntimeMessage(message: any) {
+      if (message?.type === 'CONTENT_PLATFORM_DETECTED') {
+        setPlatform(message.payload?.platformName ?? null);
+        refreshPlatformAndCourseInfo();
+      }
+    }
+
+    chrome.runtime.onMessage.addListener(handleRuntimeMessage);
+    return () => chrome.runtime.onMessage.removeListener(handleRuntimeMessage);
   }, []);
 
-  // Send message to service worker
+  // Send message to service worker.
+  //
+  // Returns `null` on any failure (dropped/closed message channel, service
+  // worker not running, extension context invalidated, etc.) so callers can
+  // treat "no response" uniformly — but every caller below is now expected
+  // to explicitly surface that as a visible error rather than silently
+  // doing nothing, which was the previous (broken) behavior.
   async function sendMessage(message: any): Promise<any> {
     try {
-      return await chrome.runtime.sendMessage(message);
-    } catch {
+      const response = await chrome.runtime.sendMessage(message);
+      return response ?? null;
+    } catch (err) {
+      console.error('CourseChat: message to service worker failed', message?.type, err);
       return null;
     }
   }
@@ -140,6 +179,14 @@ function App() {
 
     const res = await sendMessage({ type: 'VALIDATE_API_KEY', payload: { key: apiKey } });
     setKeyLoading(false);
+
+    if (res === null) {
+      // Distinct from "invalid key" — the message channel itself failed
+      // (service worker unreachable, timed out, etc.), so tell the user
+      // that explicitly instead of implying their key was wrong.
+      setKeyError('Could not reach the extension background service. Please try again.');
+      return;
+    }
 
     if (res?.payload?.hasKey) {
       setHasKey(true);
@@ -166,6 +213,7 @@ function App() {
   async function handleIndex() {
     setIndexing(true);
     setIndexResult(null);
+    setConnectionError(null);
 
     const cid = courseInfo?.courseId ?? 'default-course';
     const res = await sendMessage({
@@ -175,11 +223,19 @@ function App() {
 
     setIndexing(false);
 
+    if (res === null) {
+      // The message channel failed outright — explicit, visible error
+      // rather than a silent "nothing happened".
+      setIndexResult('✗ Could not reach the extension background service. Please try again.');
+      return;
+    }
+
     if (res?.type === 'INDEXING_COMPLETE' && res.payload.success) {
       const chars = res.payload._contextLength ? ` (${res.payload._contextLength} chars)` : '';
       setIndexResult(`✓ Indexed ${res.payload.documentsIndexed} document(s)${chars}. Ready to answer questions!`);
     } else if (res?.type === 'ERROR') {
-      setIndexResult(`✗ ${res.payload.message}`);
+      // Surface the specific error (missing API key, no content, access denied, etc.)
+      setIndexResult(`✗ ${res.payload?.message ?? 'Indexing failed.'}`);
     } else {
       setIndexResult('✗ Indexing failed. Try navigating to a course page with content.');
     }
@@ -189,22 +245,46 @@ function App() {
   async function handleQuery() {
     if (!query.trim() || query.trim().length < 3) return;
     setQueryLoading(true);
+    setConnectionError(null);
 
+    const submittedQuery = query.trim();
     const res = await sendMessage({
       type: 'PROCESS_QUERY',
-      payload: { courseId: courseInfo?.courseId ?? 'default-course', query: query.trim() },
+      payload: { courseId: courseInfo?.courseId ?? 'default-course', query: submittedQuery },
     });
 
     setQueryLoading(false);
 
-    if (res?.type === 'QUERY_RESPONSE') {
+    if (res === null) {
+      // Message channel failure (background unreachable/timed out) — show
+      // it as an explicit error bubble rather than silently dropping the
+      // question the user just asked.
       setAnswers((prev) => [
-        { query: query.trim(), answer: res.payload.answer, status: res.payload.status, citations: res.payload.citations },
+        {
+          query: submittedQuery,
+          answer: 'Could not reach the extension background service. Please check your connection and try again.',
+          status: 'error',
+          citations: [],
+        },
+        ...prev,
+      ]);
+    } else if (res?.type === 'QUERY_RESPONSE') {
+      setAnswers((prev) => [
+        { query: submittedQuery, answer: res.payload.answer, status: res.payload.status, citations: res.payload.citations },
         ...prev,
       ]);
     } else if (res?.type === 'ERROR') {
+      // Covers missing/invalid API key, network timeouts, and empty-context
+      // states surfaced by the service worker — always shown explicitly.
       setAnswers((prev) => [
-        { query: query.trim(), answer: res.payload.message, status: 'error', citations: [] },
+        { query: submittedQuery, answer: res.payload?.message ?? 'Something went wrong. Please try again.', status: 'error', citations: [] },
+        ...prev,
+      ]);
+    } else {
+      // Defensive catch-all: an unrecognized response shape should still
+      // produce a visible message instead of vanishing silently.
+      setAnswers((prev) => [
+        { query: submittedQuery, answer: 'Received an unexpected response. Please try again.', status: 'error', citations: [] },
         ...prev,
       ]);
     }
@@ -232,6 +312,15 @@ function App() {
           </button>
         </div>
       </div>
+
+      {/* Connection Error Banner */}
+      {connectionError && (
+        <div
+          style={{ ...styles.section, background: '#fce8e6', padding: '10px 12px', borderRadius: '8px' }}
+        >
+          <span style={{ fontSize: '12px', color: '#d93025' }}>⚠️ {connectionError}</span>
+        </div>
+      )}
 
       {/* Platform / Course Status */}
       <div style={styles.section}>

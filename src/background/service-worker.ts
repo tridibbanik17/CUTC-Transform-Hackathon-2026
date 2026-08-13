@@ -7,6 +7,9 @@
 import type { ServiceWorkerMessage } from '@/types/messages';
 import { apiKeyManager } from './api-key-manager';
 import { directGeminiQuery, getCourseContext, storeCourseContext } from './direct-gemini';
+import { fetchWithTimeout } from '@/shared/fetch-with-timeout';
+
+const PDF_FETCH_TIMEOUT_MS = 20000;
 
 /**
  * Extract readable text strings from raw PDF bytes.
@@ -51,21 +54,44 @@ function extractTextFromPdfBytes(bytes: Uint8Array): string {
 }
 
 // --- Side Panel Registration ---
+//
+// Both `setPanelBehavior` and `sidePanel.open` return Promises. Left
+// unhandled, a rejection from either (e.g. during a service worker
+// restart/race, or a call outside a user gesture) surfaces in
+// chrome://extensions as an unhandled promise rejection with no useful
+// stack trace — reported as "service-worker.js:0 (anonymous function)"
+// since the production bundle has no source map. Attaching `.catch()`
+// prevents that top-level crash from being logged as a mystery error.
 
-chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch((err) => {
+  console.error('CourseChat: failed to set side panel behavior', err);
+});
 
 chrome.action.onClicked.addListener((tab) => {
   if (tab.id) {
-    chrome.sidePanel.open({ tabId: tab.id });
+    chrome.sidePanel.open({ tabId: tab.id }).catch((err) => {
+      console.error('CourseChat: failed to open side panel', err);
+    });
   }
 });
 
 // --- Message Handler ---
 
 chrome.runtime.onMessage.addListener((message: ServiceWorkerMessage, sender, sendResponse) => {
-  handleMessage(message, sender).then(sendResponse).catch((err) => {
-    sendResponse({ type: 'ERROR', payload: { message: err.message ?? 'Unknown error' } });
-  });
+  handleMessage(message, sender)
+    .then(sendResponse)
+    .catch((err) => {
+      // `err` is not guaranteed to be an Error instance (a handler could
+      // reject with a string, undefined, etc.), so `err.message` would
+      // itself throw for a non-object rejection reason — guard against
+      // that rather than letting a second, unhandled error escape here.
+      const errorMessage = err instanceof Error ? err.message : String(err ?? 'Unknown error');
+      try {
+        sendResponse({ type: 'ERROR', payload: { message: errorMessage } });
+      } catch {
+        // The message channel may already be closed — nothing further to do.
+      }
+    });
   return true; // Keep channel open for async response
 });
 
@@ -78,9 +104,11 @@ async function handleMessage(
       return getCourseInfo();
 
     case 'START_INDEXING':
+    case 'INDEX_PAGE':
       return startIndexing(message.payload.courseId);
 
     case 'PROCESS_QUERY':
+    case 'ASK_QUESTION':
       return processQuery(message.payload.courseId, message.payload.query);
 
     case 'GET_INDEX_STATUS':
@@ -165,7 +193,7 @@ async function startIndexing(courseId: string) {
   if (pdfUrls.length > 0) {
     for (const pdfUrl of pdfUrls.slice(0, 3)) {
       try {
-        const response = await fetch(pdfUrl, { credentials: 'include' });
+        const response = await fetchWithTimeout(pdfUrl, { credentials: 'include' }, PDF_FETCH_TIMEOUT_MS);
         if (!response.ok) continue;
         
         const contentType = response.headers.get('content-type') || '';
@@ -232,11 +260,15 @@ async function processQuery(courseId: string, query: string) {
   }
 
   const context = await getCourseContext(courseId);
-  if (!context) {
+  if (!context || context.trim().length === 0) {
     return { type: 'ERROR', payload: { message: 'No course has been indexed yet. Click "Index Course" first.', code: 'NO_INDEX' } };
   }
 
-  // Direct Gemini query (demo mode — bypasses Backboard.io)
+  // Direct Gemini query (demo mode — bypasses Backboard.io). This call never
+  // throws — network failures, timeouts, and API errors are all caught
+  // internally and surfaced as a `retrieval_error` status with a clear
+  // message, so a failed LLM call always reaches the side panel as a
+  // visible error rather than an uncaught promise rejection.
   const result = await directGeminiQuery(apiKey, trimmed, context, courseId);
 
   return {

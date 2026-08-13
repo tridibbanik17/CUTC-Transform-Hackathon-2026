@@ -96,8 +96,11 @@ describe('ApiKeyManagerImpl', () => {
 
       const result = await manager.validateKey('AIzaSyBvalidkey123');
       expect(result).toEqual({ valid: true });
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('generativelanguage.googleapis.com/v1/models?key=AIzaSyBvalidkey123')
+      // fetchWithTimeout calls fetch(url, { signal }) — assert on the URL arg specifically
+      // rather than the full call signature, since the options object now carries an
+      // AbortSignal for timeout handling.
+      expect(mockFetch.mock.calls[0][0]).toContain(
+        'generativelanguage.googleapis.com/v1/models?key=AIzaSyBvalidkey123'
       );
     });
 

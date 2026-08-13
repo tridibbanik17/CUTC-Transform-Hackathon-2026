@@ -21,11 +21,13 @@
   },
   "devDependencies": {
     "@types/chrome": "^0.0.304",
+    "@types/jsdom": "^30.0.0",
     "@types/node": "^26.2.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.4.1",
     "fast-check": "^4.1.1",
+    "jsdom": "^29.1.1",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
     "vitest": "^3.1.3"

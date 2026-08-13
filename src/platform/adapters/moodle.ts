@@ -1,13 +1,12 @@
 // ============================================================
-// D2L Brightspace Platform Adapter
+// Moodle Platform Adapter
 // ------------------------------------------------------------
-// Implements the PlatformAdapter contract for D2L Brightspace
-// instances, regardless of institutional branding — covering
-// both hosted (*.brightspace.com) and self-hosted (*/d2l/*)
-// deployments such as Avenue to Learn and Waterloo LEARN, plus
-// every course sub-view (`/le/content/`, `/le/lessons/`,
-// `/lp/*`, `/home/<ouId>`, `/le/discussions/`, `/lms/dropbox/`,
-// `/quizzing/`, `/grades/`, etc.).
+// Implements the PlatformAdapter contract for Moodle instances,
+// identified by Moodle's characteristic `course/view.php?id=`
+// URL convention, plus section-anchor variants
+// (`course/view.php?id=<n>&section=<n>`, `#section-<n>`) and
+// direct module views (`mod/resource/view.php?id=<n>`) that
+// occur while navigating within a course.
 //
 // Every public method is defensive by design: URL/DOM parsing
 // failures are caught locally so a single malformed page can
@@ -23,29 +22,8 @@
 
 import type { PlatformAdapter, DocumentLink, CitationMetadata } from '@/types';
 
-/** Hosted D2L Brightspace domains, e.g. https://mycourse.brightspace.com/... */
-const HOSTED_PATTERN = /^https:\/\/[^/]*\.brightspace\.com\//;
-
-/** Self-hosted D2L instances, e.g. https://learn.example.edu/d2l/... */
-const SELF_HOSTED_PATTERN = /^https:\/\/[^/]*\/d2l\//;
-
-/**
- * Patterns that identify a numeric D2L "org unit" (course) identifier in a
- * URL, across every course sub-view: content, lessons, lightweight-portal
- * (`/lp/`) tool pages, dropbox, discussions, quizzing, grades, and the
- * course-scoped home landing page.
- */
-const COURSE_ID_PATTERNS: RegExp[] = [
-  /\/d2l\/le\/content\/(\d+)/i,
-  /\/d2l\/le\/lessons\/(\d+)/i,
-  /\/d2l\/lp\/[^/?]+\/(\d+)/i,
-  /\/d2l\/le\/discussions\/(\d+)/i,
-  /\/d2l\/lms\/dropbox\/[^?]*[?&]ou=(\d+)/i,
-  /\/d2l\/lms\/quizzing\/[^?]*[?&]ou=(\d+)/i,
-  /\/d2l\/lms\/grades\/[^?]*[?&]ou=(\d+)/i,
-  /\/d2l\/home\/(\d+)/i,
-  /[?&]ou=(\d+)/i,
-];
+/** Moodle course page convention: .../course/view.php?id=<courseId>[&section=<n>][#section-<n>] */
+const COURSE_VIEW_PATTERN = /\/course\/view\.php\?(?:[^#]*&)?id=(\d+)/;
 
 /** File extensions recognized as course materials, mapped to `DocumentLink['fileType']`. */
 const SUPPORTED_EXTENSIONS: Record<string, DocumentLink['fileType']> = {
@@ -76,8 +54,7 @@ const SUPPORTED_EXTENSIONS: Record<string, DocumentLink['fileType']> = {
 function getExtensionFromUrl(url: string): string | null {
   try {
     const parsed = new URL(url);
-    const path = parsed.pathname;
-    const match = path.match(/\.([a-z0-9]+)$/i);
+    const match = parsed.pathname.match(/\.([a-z0-9]+)$/i);
     return match ? match[1].toLowerCase() : null;
   } catch {
     const withoutQuery = url.split(/[?#]/)[0];
@@ -86,47 +63,25 @@ function getExtensionFromUrl(url: string): string | null {
   }
 }
 
+/** Extracts an extension from free text (e.g. resource link text like "Week1 Slides.pptx"). */
+function getExtensionFromText(text: string | null | undefined): string | null {
+  if (!text) return null;
+  const match = text.match(/\.([a-z0-9]+)\s*$/i);
+  return match ? match[1].toLowerCase() : null;
+}
+
 /** Derives a human-readable file name from a URL, falling back to provided anchor text. */
 function getFileNameFromUrl(url: string, fallback?: string | null): string {
   try {
     const parsed = new URL(url);
     const segments = parsed.pathname.split('/').filter(Boolean);
     const last = segments[segments.length - 1];
-    if (last) return decodeURIComponent(last);
+    if (last && /\.[a-z0-9]+$/i.test(last)) return decodeURIComponent(last);
   } catch {
     // ignore, fall through to fallback handling below
   }
   const trimmedFallback = fallback?.trim();
   return trimmedFallback && trimmedFallback.length > 0 ? trimmedFallback : url;
-}
-
-/** Best-effort extraction of a file size string (e.g. "133 KB") near a link element. Never throws. */
-function findNearbySizeText(el: Element): number | undefined {
-  try {
-    const container = el.closest('li, tr, .d2l-list-item, .d2l-datalist-item') ?? el.parentElement;
-    const text = container?.textContent ?? '';
-    const match = text.match(/([\d.]+)\s*(KB|MB|GB)/i);
-    if (!match) return undefined;
-
-    const value = parseFloat(match[1]);
-    const unit = match[2].toUpperCase();
-    const multiplier = unit === 'GB' ? 1024 * 1024 * 1024 : unit === 'MB' ? 1024 * 1024 : 1024;
-    return Math.round(value * multiplier);
-  } catch {
-    return undefined;
-  }
-}
-
-/** Best-effort extraction of a last-modified date string near a link element. Never throws. */
-function findNearbyDateText(el: Element): string | undefined {
-  try {
-    const container = el.closest('li, tr, .d2l-list-item, .d2l-datalist-item') ?? el.parentElement;
-    const timeEl = container?.querySelector('time[datetime]');
-    const datetime = timeEl?.getAttribute('datetime');
-    return datetime ?? undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 /** Safely reads the current document's URL without ever throwing. */
@@ -138,14 +93,14 @@ function safeDocumentUrl(document: Document): string {
   }
 }
 
-export const d2lBrightspaceAdapter: PlatformAdapter = {
-  name: 'D2L Brightspace',
+export const moodleAdapter: PlatformAdapter = {
+  name: 'Moodle',
 
-  urlPatterns: [HOSTED_PATTERN, SELF_HOSTED_PATTERN],
+  urlPatterns: [COURSE_VIEW_PATTERN],
 
-  priority: 1,
+  priority: 3,
 
-  /** Detect D2L URLs (hosted or self-hosted) regardless of institutional branding. */
+  /** Detect Moodle URLs via the `course/view.php?id=` convention. */
   matchesUrl(url: string): boolean {
     try {
       return this.urlPatterns.some((pattern) => pattern.test(url));
@@ -155,37 +110,30 @@ export const d2lBrightspaceAdapter: PlatformAdapter = {
   },
 
   /**
-   * Distinguish actual course shells from general dashboard/login pages.
-   * Course shells live under `/d2l/le/content/`, `/d2l/le/lessons/`,
-   * `/d2l/lp/*`, `/d2l/le/discussions/`, any `ou=<id>` tool page
-   * (dropbox/quizzing/grades), or a course-scoped `/d2l/home/<ouId>` —
-   * as opposed to the bare `/d2l/home` dashboard or `/d2l/login`-style
-   * authentication pages. Never throws — any URL access failure
-   * resolves to `false`.
+   * A URL matching `course/view.php?id=<n>` is itself a course page in
+   * Moodle — including section-anchor variants (`&section=<n>`,
+   * `#section-<n>`) — there is no separate dashboard shape that matches
+   * this pattern, so matching the URL is sufficient confirmation. Never
+   * throws — any URL access failure resolves to `false`.
    */
   isCoursePage(document: Document): boolean {
     try {
       const url = safeDocumentUrl(document);
       if (!url) return false;
-      if (/\/d2l\/login/i.test(url)) return false;
-
-      return COURSE_ID_PATTERNS.some((pattern) => pattern.test(url));
+      return COURSE_VIEW_PATTERN.test(url);
     } catch {
       return false;
     }
   },
 
   /**
-   * Parse the numeric D2L org unit (course) identifier out of the URL
-   * structure. Never throws — returns `null` on any parsing failure.
+   * Parse the numeric Moodle course identifier out of the `id` query
+   * parameter. Never throws — returns `null` on any parsing failure.
    */
   extractCourseId(url: string): string | null {
     try {
-      for (const pattern of COURSE_ID_PATTERNS) {
-        const match = url?.match(pattern);
-        if (match?.[1]) return match[1];
-      }
-      return null;
+      const match = url?.match(COURSE_VIEW_PATTERN);
+      return match?.[1] ?? null;
     } catch {
       return null;
     }
@@ -194,9 +142,9 @@ export const d2lBrightspaceAdapter: PlatformAdapter = {
   /**
    * Extract the course title from the page header DOM.
    *
-   * Tries several known D2L header selectors (page title, navigation
-   * header logo area, any element carrying a course-name-ish class,
-   * and generic VUI heading fallbacks), then falls back to
+   * Tries several known Moodle header selectors (page-header-headings,
+   * coursename badge, course-header region, and generic `h1`/`h2`
+   * fallbacks used across Moodle themes), then falls back to
    * `document.title`, and finally a generic string. Every DOM/string
    * operation is individually try/caught so a missing element, a
    * detached node, or a synchronous DOM exception can never throw out
@@ -205,10 +153,10 @@ export const d2lBrightspaceAdapter: PlatformAdapter = {
    */
   extractCourseName(document: Document): string | null {
     const selectors = [
-      '.d2l-page-title',
-      '.d2l-navigation-s-header-logo-area',
-      '[class*="course-name"]',
-      'h1.vui-heading-1',
+      '.page-header-headings h1',
+      '.coursename',
+      '[data-region="course-header"] h1',
+      'h1.h2',
       'header h1',
       'h1',
     ];
@@ -225,7 +173,7 @@ export const d2lBrightspaceAdapter: PlatformAdapter = {
 
     try {
       const rawTitle = document?.title ?? '';
-      const titleText = rawTitle.split(' - ')[0]?.trim();
+      const titleText = rawTitle.trim();
       if (titleText) return titleText;
     } catch {
       // document.title access failed — fall through to the generic fallback below.
@@ -235,7 +183,7 @@ export const d2lBrightspaceAdapter: PlatformAdapter = {
   },
 
   /**
-   * Enumerate course material links from the page DOM, restricted to
+   * Enumerate section resource links from the page DOM, restricted to
    * supported file types. Every DOM query and per-element extraction
    * step is wrapped in try/catch so a non-standard node (missing
    * `href`, detached element, unexpected attribute shape) can never
@@ -252,7 +200,7 @@ export const d2lBrightspaceAdapter: PlatformAdapter = {
     })();
     const links = new Map<string, DocumentLink>();
 
-    const addCandidate = (rawUrl: string, anchorText?: string | null, el?: Element) => {
+    const addCandidate = (rawUrl: string, anchorText?: string | null) => {
       try {
         if (!rawUrl) return;
         const absoluteUrl = rawUrl.startsWith('http')
@@ -262,8 +210,14 @@ export const d2lBrightspaceAdapter: PlatformAdapter = {
             : null;
         if (!absoluteUrl) return;
 
-        const extension = getExtensionFromUrl(absoluteUrl);
-        const fileType = extension ? SUPPORTED_EXTENSIONS[extension] : undefined;
+        // Prefer the URL's extension only when it is a recognized document type —
+        // Moodle resource links often end in `.php` (a view-page URL, not the
+        // actual file), so fall back to the anchor text's extension in that case.
+        const urlExtension = getExtensionFromUrl(absoluteUrl);
+        const textExtension = getExtensionFromText(anchorText);
+        const fileType =
+          (urlExtension ? SUPPORTED_EXTENSIONS[urlExtension] : undefined) ??
+          (textExtension ? SUPPORTED_EXTENSIONS[textExtension] : undefined);
         if (!fileType) return;
 
         if (links.has(absoluteUrl)) return;
@@ -272,8 +226,6 @@ export const d2lBrightspaceAdapter: PlatformAdapter = {
           url: absoluteUrl,
           fileName: getFileNameFromUrl(absoluteUrl, anchorText),
           fileType,
-          fileSize: el ? findNearbySizeText(el) : undefined,
-          lastModified: el ? findNearbyDateText(el) : undefined,
         });
       } catch {
         // Skip this candidate — malformed URL/attribute should never abort the scan.
@@ -281,47 +233,37 @@ export const d2lBrightspaceAdapter: PlatformAdapter = {
     };
 
     try {
-      // Direct anchors pointing at course content / downloads.
+      // Moodle resource/module links: mod/resource/view.php, mod/folder/view.php,
+      // and direct pluginfile.php download links (Moodle's file-serving convention).
       document
         .querySelectorAll<HTMLAnchorElement>(
-          'a[href*="/content/enforced/"], a[href*="/topics/files/download/"], a[href*="/content/"], a[download]'
+          'a[href*="/mod/resource/"], a[href*="/mod/folder/"], a[href*="pluginfile.php"], .activityinstance a'
         )
         .forEach((a) => {
           try {
-            addCandidate(a.href, a.textContent, a);
+            addCandidate(a.href, a.textContent);
           } catch {
             // Malformed anchor element — skip and keep scanning.
           }
         });
     } catch {
-      // querySelectorAll itself failed (non-standard/detached document) — continue below.
-    }
-
-    try {
-      // D2L's DirectFileTopicDownload pattern embedded in page markup.
-      const pageHtml = document.documentElement.innerHTML;
-      const downloadMatches = pageHtml.match(/\/d2l\/le\/content\/\d+\/topics\/files\/download\/[^"'\s<>]+/gi) ?? [];
-      downloadMatches.forEach((path) => addCandidate(`${origin}${path}`));
-
-      const enforcedMatches = pageHtml.match(/\/content\/enforced\/[^"'\s<>]+\.[a-zA-Z0-9]+/gi) ?? [];
-      enforcedMatches.forEach((path) => addCandidate(`${origin}${path}`));
-    } catch {
-      // innerHTML access failed — return whatever anchors were already found above.
+      // querySelectorAll itself failed (non-standard/detached document) — return what we have.
     }
 
     return Array.from(links.values());
   },
 
-  /** Construct a structured D2L navigation URL for jumping to a cited source document. */
+  /** Construct a Moodle navigation URL for jumping to a cited source document. */
   buildCitationUrl(courseId: string, citation: CitationMetadata): string {
     try {
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
       const params = new URLSearchParams();
-      params.set('fileName', citation.fileName);
+      params.set('id', courseId);
+      params.set('search', citation.fileName);
       if (citation.pageNumber) params.set('page', String(citation.pageNumber));
       if (citation.sectionHeading) params.set('section', citation.sectionHeading);
 
-      return `${origin}/d2l/le/content/${courseId}/Home?${params.toString()}`;
+      return `${origin}/course/view.php?${params.toString()}`;
     } catch {
       return '';
     }

@@ -6,9 +6,11 @@
 // ============================================================
 
 import type { APIKeyManager } from '@/types';
+import { fetchWithTimeout, FetchTimeoutError } from '@/shared/fetch-with-timeout';
 
 const STORAGE_KEY = 'lms_rag_gemini_api_key';
 const GEMINI_MODELS_ENDPOINT = 'https://generativelanguage.googleapis.com/v1/models';
+const VALIDATE_KEY_TIMEOUT_MS = 10000;
 
 export class ApiKeyManagerImpl implements APIKeyManager {
   /**
@@ -51,7 +53,11 @@ export class ApiKeyManagerImpl implements APIKeyManager {
     }
 
     try {
-      const response = await fetch(`${GEMINI_MODELS_ENDPOINT}?key=${encodeURIComponent(trimmed)}`);
+      const response = await fetchWithTimeout(
+        `${GEMINI_MODELS_ENDPOINT}?key=${encodeURIComponent(trimmed)}`,
+        {},
+        VALIDATE_KEY_TIMEOUT_MS
+      );
 
       if (response.ok) {
         return { valid: true };
@@ -67,6 +73,9 @@ export class ApiKeyManagerImpl implements APIKeyManager {
 
       return { valid: false, error: `Validation failed with status ${response.status}` };
     } catch (err) {
+      if (err instanceof FetchTimeoutError) {
+        return { valid: false, error: 'Validation request timed out. Please check your connection and try again.' };
+      }
       return {
         valid: false,
         error: `Network error during validation: ${err instanceof Error ? err.message : 'Unknown error'}`,
