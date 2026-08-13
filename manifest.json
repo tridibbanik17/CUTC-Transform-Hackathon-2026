@@ -42,5 +42,8 @@
       "resources": ["pdf-parser/index.html"],
       "matches": ["<all_urls>"]
     }
-  ]
+  ],
+  "sandbox": {
+    "pages": ["pdf-parser/index.html"]
+  }
 }
