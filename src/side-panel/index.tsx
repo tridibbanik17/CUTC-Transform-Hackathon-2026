@@ -59,9 +59,11 @@ function App() {
       if (res?.payload) setCourseInfo(res.payload);
     });
     // Check existing context
-    chrome.storage.local.get('course_context_default-course', (r) => {
+    chrome.storage.local.get(['course_context_default-course', 'course_files_default-course'], (r) => {
       const ctx = r['course_context_default-course'] || '';
       if (ctx.length > 0) setTotalChars(ctx.length);
+      const files = r['course_files_default-course'] || [];
+      if (files.length > 0) setUploadedFiles(files);
     });
     chrome.storage.session.get(PRIVACY_NOTICE_SESSION_KEY, (result) => {
       setPrivacyAcknowledged(Boolean(result[PRIVACY_NOTICE_SESSION_KEY]));
@@ -120,16 +122,20 @@ function App() {
 
     if (allText.length > 0) {
       const capped = allText.slice(0, 80000);
-      await chrome.storage.local.set({ ['course_context_default-course']: capped });
+      const allFileNames = [...uploadedFiles, ...newFileNames];
+      await chrome.storage.local.set({
+        'course_context_default-course': capped,
+        'course_files_default-course': allFileNames,
+      });
       setTotalChars(capped.length);
-      setUploadedFiles((prev) => [...prev, ...newFileNames]);
+      setUploadedFiles(allFileNames);
       setIndexResult(`✓ Uploaded ${filesProcessed} file(s). Ready to answer questions!`);
     } else if (!indexResult) { setIndexResult('✗ Could not extract text from uploaded files.'); }
     setIndexing(false); e.target.value = '';
   }
 
   async function handleClearContext() {
-    await chrome.storage.local.remove('course_context_default-course');
+    await chrome.storage.local.remove(['course_context_default-course', 'course_files_default-course']);
     setUploadedFiles([]); setTotalChars(0);
     setIndexResult('🗑️ Cleared. Upload new files to start fresh.');
   }
@@ -237,7 +243,7 @@ function App() {
           {/* Files indexed counter */}
           {hasContent && (
             <div style={{ marginTop: '8px', padding: '8px 12px', background: '#e8f5e9', borderRadius: '8px', fontSize: '12px', color: '#2e7d32' }}>
-              📚 {uploadedFiles.length} file{uploadedFiles.length !== 1 ? 's' : ''} | {(totalChars / 1000).toFixed(1)}k chars indexed
+              📚 {uploadedFiles.length > 0 ? `${uploadedFiles.length} file${uploadedFiles.length !== 1 ? 's' : ''}` : 'Content ready'} | {(totalChars / 1000).toFixed(1)}k chars indexed
             </div>
           )}
 
