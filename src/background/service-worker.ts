@@ -148,6 +148,7 @@ async function startIndexing(courseId: string) {
     pageText = res?.payload?.text ?? '';
     pdfUrls = res?.payload?.pdfUrls ?? [];
   } catch {
+    // Content script not available — use scripting to auto-scroll and extract
     try {
       const [result] = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
@@ -156,6 +157,49 @@ async function startIndexing(courseId: string) {
       pageText = result?.result ?? '';
     } catch {
       return { type: 'ERROR', payload: { message: 'Cannot access page content.', code: 'ACCESS_DENIED' } };
+    }
+  }
+
+  // If page text is low, try using scripting API to auto-scroll and re-extract
+  if (pageText.length < 5000) {
+    try {
+      const [result] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: async () => {
+          // Find all scrollable elements and scroll them fully
+          const scrollables: Element[] = [];
+          document.querySelectorAll('*').forEach((el) => {
+            if (el.scrollHeight > el.clientHeight + 200) {
+              const style = window.getComputedStyle(el);
+              if (style.overflow === 'auto' || style.overflow === 'scroll' ||
+                  style.overflowY === 'auto' || style.overflowY === 'scroll' ||
+                  el.tagName === 'HTML') {
+                scrollables.push(el);
+              }
+            }
+          });
+
+          // Scroll each container to bottom and back
+          for (const el of scrollables) {
+            const orig = el.scrollTop;
+            const height = el.scrollHeight;
+            for (let pos = 0; pos < height; pos += 500) {
+              el.scrollTop = pos;
+              await new Promise(r => setTimeout(r, 30));
+            }
+            el.scrollTop = orig;
+          }
+
+          await new Promise(r => setTimeout(r, 500));
+          return document.body.innerText;
+        },
+      });
+      const scrolledText = result?.result ?? '';
+      if (scrolledText.length > pageText.length) {
+        pageText = scrolledText;
+      }
+    } catch {
+      // Ignore scripting failures
     }
   }
 
