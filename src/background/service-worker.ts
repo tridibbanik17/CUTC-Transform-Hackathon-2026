@@ -183,15 +183,17 @@ async function startIndexing(courseId: string) {
           for (const el of scrollables) {
             const orig = el.scrollTop;
             const height = el.scrollHeight;
-            for (let pos = 0; pos < height; pos += 400) {
+            for (let pos = 0; pos < height; pos += 300) {
               el.scrollTop = pos;
-              await new Promise(r => setTimeout(r, 50));
+              await new Promise(r => setTimeout(r, 150));
             }
+            // Wait at bottom for final render
+            await new Promise(r => setTimeout(r, 300));
             // Scroll back
             el.scrollTop = orig;
           }
 
-          await new Promise(r => setTimeout(r, 500));
+          await new Promise(r => setTimeout(r, 800));
           return document.body?.innerText || '';
         },
       });
