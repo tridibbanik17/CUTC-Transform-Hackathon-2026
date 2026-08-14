@@ -288,6 +288,49 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       sendResponse({ payload: null });
       break;
 
+    case 'START_SPEECH':
+      (() => {
+        const SR = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+        if (!SR) {
+          chrome.runtime.sendMessage({ type: 'SPEECH_ERROR', error: 'not-supported' });
+          sendResponse({ payload: null });
+          return;
+        }
+
+        // Stop previous
+        if ((window as any).__ccRecognition) {
+          try { (window as any).__ccRecognition.stop(); } catch {}
+        }
+
+        const recognition = new SR();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+        (window as any).__ccRecognition = recognition;
+
+        recognition.onresult = (event: any) => {
+          let final = '';
+          let interim = '';
+          for (let i = 0; i < event.results.length; i++) {
+            if (event.results[i].isFinal) final += event.results[i][0].transcript + ' ';
+            else interim += event.results[i][0].transcript;
+          }
+          chrome.runtime.sendMessage({ type: 'SPEECH_RESULT', text: (final + interim).trim() });
+        };
+
+        recognition.onerror = (e: any) => {
+          chrome.runtime.sendMessage({ type: 'SPEECH_ERROR', error: e.error });
+        };
+
+        recognition.onend = () => {
+          chrome.runtime.sendMessage({ type: 'SPEECH_END' });
+        };
+
+        recognition.start();
+      })();
+      sendResponse({ payload: null });
+      break;
+
     case 'GET_DOCUMENT_LINKS':
       sendResponse({ payload: { links: [] } });
       break;

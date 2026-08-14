@@ -416,7 +416,6 @@ function App() {
   // Voice dictation — runs speech recognition on the active web page (has mic access)
   function handleVoiceInput() {
     if (isListening) {
-      // Stop: send stop message to the tab
       setIsListening(false);
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (tabs[0]?.id) {
@@ -428,54 +427,13 @@ function App() {
 
     setIsListening(true);
 
+    // Ask the content script (which runs on the page) to start speech recognition
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (!tabs[0]?.id) { setIsListening(false); return; }
-      
-      chrome.scripting.executeScript({
-        target: { tabId: tabs[0].id },
-        func: () => {
-          // This runs in the web page context — HAS microphone access
-          const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
-          if (!SpeechRecognition) {
-            chrome.runtime.sendMessage({ type: 'SPEECH_ERROR', error: 'not-supported' });
-            return;
-          }
-
-          // Stop any previous instance
-          if ((window as any).__ccRecognition) {
-            try { (window as any).__ccRecognition.stop(); } catch {}
-          }
-
-          const recognition = new SpeechRecognition();
-          recognition.continuous = true;
-          recognition.interimResults = true;
-          recognition.lang = 'en-US';
-          (window as any).__ccRecognition = recognition;
-
-          recognition.onresult = (event: any) => {
-            let final = '';
-            let interim = '';
-            for (let i = 0; i < event.results.length; i++) {
-              if (event.results[i].isFinal) final += event.results[i][0].transcript + ' ';
-              else interim += event.results[i][0].transcript;
-            }
-            chrome.runtime.sendMessage({ type: 'SPEECH_RESULT', text: (final + interim).trim() });
-          };
-
-          recognition.onerror = (e: any) => {
-            chrome.runtime.sendMessage({ type: 'SPEECH_ERROR', error: e.error });
-          };
-
-          recognition.onend = () => {
-            chrome.runtime.sendMessage({ type: 'SPEECH_END' });
-          };
-
-          recognition.start();
-        },
-      }).catch(() => setIsListening(false));
+      chrome.tabs.sendMessage(tabs[0].id, { type: 'START_SPEECH' });
     });
 
-    // Listen for results from the content script
+    // Listen for results relayed through the service worker
     const listener = (message: any) => {
       if (message.type === 'SPEECH_RESULT') {
         setQuery(message.text);
