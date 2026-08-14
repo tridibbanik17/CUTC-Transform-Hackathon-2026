@@ -428,9 +428,23 @@ function App() {
     setIsListening(true);
 
     // Ask the content script (which runs on the page) to start speech recognition
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
       if (!tabs[0]?.id) { setIsListening(false); return; }
-      chrome.tabs.sendMessage(tabs[0].id, { type: 'START_SPEECH' });
+      const tabId = tabs[0].id;
+      
+      // Try sending to content script; if not there, inject it first
+      try {
+        await chrome.tabs.sendMessage(tabId, { type: 'START_SPEECH' });
+      } catch {
+        // Content script not injected — inject it, wait, then try again
+        try {
+          await chrome.scripting.executeScript({ target: { tabId }, files: ['content-script.js'] });
+          await new Promise(r => setTimeout(r, 500));
+          await chrome.tabs.sendMessage(tabId, { type: 'START_SPEECH' });
+        } catch {
+          setIsListening(false);
+        }
+      }
     });
 
     // Listen for results relayed through the service worker
