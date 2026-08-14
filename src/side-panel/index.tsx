@@ -1,5 +1,109 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
+import { PrivacyNotice, PRIVACY_NOTICE_SESSION_KEY } from './components/PrivacyNotice';
+
+const STORAGE_KEYS = {
+  darkMode: 'coursechat-dark-mode',
+  chatHistory: 'coursechat-chat-history',
+} as const;
+
+type Theme = {
+  bg: string;
+  text: string;
+  textMuted: string;
+  textSecondary: string;
+  accent: string;
+  accentDark: string;
+  settingsBg: string;
+  border: string;
+  borderLight: string;
+  inputBg: string;
+  warningBg: string;
+  warningText: string;
+  successBg: string;
+  success: string;
+  errorBg: string;
+  error: string;
+  hoverBg: string;
+  cardBg: string;
+  shadow: string;
+};
+
+const lightTheme: Theme = {
+  bg: '#ffffff',
+  text: '#1f1f1f',
+  textMuted: '#666666',
+  textSecondary: '#4f4f4f',
+  accent: '#1a73e8',
+  accentDark: '#1558b0',
+  settingsBg: '#f8fafc',
+  border: '#d9e2ec',
+  borderLight: '#cbd5e1',
+  inputBg: '#ffffff',
+  warningBg: '#fef7e0',
+  warningText: '#8a6d3b',
+  successBg: '#e6f4ea',
+  success: '#188038',
+  errorBg: '#fce8e6',
+  error: '#d93025',
+  hoverBg: '#eef2f7',
+  cardBg: '#ffffff',
+  shadow: 'rgba(0,0,0,0.08)',
+};
+
+const darkTheme: Theme = {
+  bg: '#0f172a',
+  text: '#e5e7eb',
+  textMuted: '#9ca3af',
+  textSecondary: '#cbd5e1',
+  accent: '#7dd3fc',
+  accentDark: '#38bdf8',
+  settingsBg: '#111827',
+  border: '#334155',
+  borderLight: '#475569',
+  inputBg: '#0b1220',
+  warningBg: '#3a2f12',
+  warningText: '#fbbf24',
+  successBg: '#10261a',
+  success: '#4ade80',
+  errorBg: '#3b1d1d',
+  error: '#f87171',
+  hoverBg: '#1f2937',
+  cardBg: '#111827',
+  shadow: 'rgba(0,0,0,0.35)',
+};
+
+function CopyButton({ text, theme }: { text: string; theme: Theme }) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      style={{
+        padding: '6px 10px',
+        background: copied ? theme.successBg : theme.hoverBg,
+        color: copied ? theme.success : theme.textSecondary,
+        border: `1px solid ${theme.border}`,
+        borderRadius: '8px',
+        fontSize: '12px',
+        cursor: 'pointer',
+      }}
+    >
+      {copied ? 'Copied' : 'Copy'}
+    </button>
+  );
+}
 
 // --- PDF Parser using sandboxed iframe ---
 function parsePdfInIframe(buffer: ArrayBuffer): Promise<string> {
@@ -81,6 +185,20 @@ function App() {
   const [indexResult, setIndexResult] = useState<string | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
   const [totalChars, setTotalChars] = useState(0);
+  const [privacyAcknowledged, setPrivacyAcknowledged] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
+
+  const theme = darkMode ? darkTheme : lightTheme;
+
+  useEffect(() => {
+    chrome.storage.session.get([PRIVACY_NOTICE_SESSION_KEY], (result) => {
+      setPrivacyAcknowledged(Boolean(result[PRIVACY_NOTICE_SESSION_KEY]));
+    });
+
+    chrome.storage.local.get([STORAGE_KEYS.darkMode], (result) => {
+      setDarkMode(Boolean(result[STORAGE_KEYS.darkMode]));
+    });
+  }, []);
 
   // Load persisted state on mount
   useEffect(() => {
@@ -104,6 +222,11 @@ function App() {
 
   async function sendMessage(message: any): Promise<any> {
     try { return await chrome.runtime.sendMessage(message); } catch { return null; }
+  }
+
+  function handleAcknowledgePrivacyNotice() {
+    chrome.storage.session.set({ [PRIVACY_NOTICE_SESSION_KEY]: true }).catch(() => {});
+    setPrivacyAcknowledged(true);
   }
 
   async function handleSaveKey() {
@@ -308,7 +431,7 @@ function App() {
         <div style={{ marginBottom: '16px' }}>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <label style={{ padding: '9px 16px', background: theme.accent, color: '#fff', borderRadius: '8px', fontSize: '13px', cursor: 'pointer', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-              {indexing ? <><Spinner theme={theme} /> Processing...</> : 'Upload PDF/File'}
+              {indexing ? <><Spinner /> Processing...</> : 'Upload PDF/File'}
               <input type="file" accept=".pdf,.pptx,.docx,.txt,.md,.py,.java,.js,.cpp,.c,.css,.csv,.ipynb,.html,.doc,.odt,.m" multiple style={{ display: 'none' }} onChange={handleFileUpload} disabled={indexing} />
             </label>
             {hasContent && (
@@ -365,11 +488,11 @@ function App() {
             <div key={i} style={{ marginBottom: '16px', padding: '14px', background: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: '12px', boxShadow: `0 1px 3px ${theme.shadow}` }}>
               <div style={{ fontSize: '13px', fontWeight: 600, color: theme.text, marginBottom: '8px' }}>Q: {a.query}</div>
               <div style={{ fontSize: '13px', lineHeight: 1.6, color: darkMode ? '#ccc' : '#333' }}>
-                {a.status === 'success' && <FormattedAnswer text={a.answer} theme={theme} />}
+                {a.status === 'success' && <FormattedAnswer text={a.answer} />}
                 {a.status === 'low_confidence' && (
                   <>
                     <span style={{ background: theme.warningBg, color: theme.warningText, padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 500 }}>Low confidence</span><br /><br />
-                    <FormattedAnswer text={a.answer} theme={theme} />
+                    <FormattedAnswer text={a.answer} />
                   </>
                 )}
                 {a.status === 'insufficient_information' && (
