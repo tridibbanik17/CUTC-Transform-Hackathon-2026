@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PrivacyNotice, PRIVACY_NOTICE_SESSION_KEY } from './components/PrivacyNotice';
+import { useSessionHistory } from './hooks/useSessionHistory';
 
 const STORAGE_KEYS = {
   darkMode: 'coursechat-dark-mode',
@@ -223,9 +224,12 @@ function App() {
   const [keyLoading, setKeyLoading] = useState(false);
   const [query, setQuery] = useState('');
   const [queryLoading, setQueryLoading] = useState(false);
-  const [answers, setAnswers] = useState<Array<{ query: string; answer: string; status: string; citations: any[] }>>([]);
   const [platform, setPlatform] = useState<string | null>(null);
   const [courseInfo, setCourseInfo] = useState<{ courseName: string; courseId: string } | null>(null);
+
+  // Persisted chat history (IndexedDB-backed, survives tab close) — replaces the old local useState<answers>
+  const { history: answers, recordResponse, clearHistory } = useSessionHistory(courseInfo?.courseId ?? 'default-course');
+
   const [showSettings, setShowSettings] = useState(false);
   const [indexing, setIndexing] = useState(false);
   const [indexResult, setIndexResult] = useState<string | null>(null);
@@ -363,19 +367,19 @@ function App() {
   async function handleQuery() {
     if (!query.trim() || query.trim().length < 3) return;
     setQueryLoading(true);
-    const res = await sendMessage({ type: 'PROCESS_QUERY', payload: { courseId: courseInfo?.courseId ?? 'default-course', query: query.trim() } });
+    const trimmedQuery = query.trim();
+    const res = await sendMessage({ type: 'PROCESS_QUERY', payload: { courseId: courseInfo?.courseId ?? 'default-course', query: trimmedQuery } });
     setQueryLoading(false);
     if (res?.type === 'QUERY_RESPONSE') {
-      setAnswers((prev) => [{ query: query.trim(), answer: res.payload.answer, status: res.payload.status, citations: res.payload.citations }, ...prev]);
+      await recordResponse(trimmedQuery, { query: trimmedQuery, answer: res.payload.answer, status: res.payload.status, citations: res.payload.citations });
     } else if (res?.type === 'ERROR') {
-      setAnswers((prev) => [{ query: query.trim(), answer: res.payload.message, status: 'error', citations: [] }, ...prev]);
+      await recordResponse(trimmedQuery, { query: trimmedQuery, answer: res.payload.message, status: 'error', citations: [] });
     }
     setQuery('');
   }
 
-  function handleClearHistory() {
-    setAnswers([]);
-    chrome.storage.local.remove(STORAGE_KEYS.chatHistory);
+  async function handleClearHistory() {
+    await clearHistory();
   }
 
   function handleExportChat() {
@@ -389,7 +393,7 @@ function App() {
       if (a.citations.length > 0) {
         lines.push('');
         lines.push('**Sources:**');
-        a.citations.forEach((c) => {
+        a.citations.forEach((c: any) => {
           lines.push(`- ${c.fileName} — p.${c.pageNumber}${c.sectionHeading ? ` (${c.sectionHeading})` : ''}`);
         });
       }
@@ -597,6 +601,12 @@ function App() {
             <button onClick={handleQuery} disabled={queryLoading || query.trim().length < 3} style={{ padding: '10px 20px', background: queryLoading || query.trim().length < 3 ? '#a0c4f0' : '#1a73e8', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', cursor: queryLoading ? 'wait' : 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
               {queryLoading ? <><Spinner /> Thinking...</> : 'Ask'}
             </button>
+            {answers.length > 0 && (
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={handleExportChat} style={{ padding: '8px 14px', background: theme.hoverBg, color: theme.textSecondary, border: `1px solid ${theme.border}`, borderRadius: '8px', fontSize: '12px', cursor: 'pointer' }}>Export</button>
+                <button onClick={handleClearHistory} style={{ padding: '8px 14px', background: theme.hoverBg, color: theme.textSecondary, border: `1px solid ${theme.border}`, borderRadius: '8px', fontSize: '12px', cursor: 'pointer' }}>Clear chat</button>
+              </div>
+            )}
           </div>
           {!privacyAcknowledged && <div style={{ fontSize: '11px', color: '#8a6d3b', marginTop: '8px' }}>Acknowledge the privacy notice above before asking a question.</div>}
         </div>
@@ -624,7 +634,7 @@ function App() {
               </div>
               {a.citations.length > 0 && (
                 <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: `1px solid ${theme.border}` }}>
-                  {a.citations.map((c, j) => (
+                  {a.citations.map((c: any, j: number) => (
                     <div key={j} style={{ fontSize: '11px', color: theme.accent, margin: '3px 0' }}>{c.fileName} — p.{c.pageNumber} {c.sectionHeading && `(${c.sectionHeading})`}</div>
                   ))}
                 </div>

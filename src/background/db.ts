@@ -82,6 +82,28 @@ export async function getHistoryByCourseSession(
   });
 }
 
+/**
+ * Delete a single history entry by its id.
+ * Scoped deletion — used for "Clear chat" on the current course/session,
+ * as opposed to clearHistory() below which wipes every course's history.
+ */
+export async function deleteHistoryEntry(id: string): Promise<void> {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('history', 'readwrite');
+    tx.objectStore('history').delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/**
+ * Wipes the ENTIRE history store — every course, every session.
+ * Not used by the per-conversation "Clear chat" button; that uses
+ * deleteHistoryEntry() in a loop scoped to the active course+session
+ * (see useSessionHistory.ts's clearHistory()). Keep this one for an
+ * explicit "reset everything" action only, if you add one.
+ */
 export async function clearHistory(): Promise<void> {
   const db = await openDatabase();
   return new Promise((resolve, reject) => {

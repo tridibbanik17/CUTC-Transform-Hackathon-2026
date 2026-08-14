@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { RAGResponse, HistoryEntry } from '@/types';
-import { addHistoryEntry, getHistoryByCourseSession } from '@/background/db';
+import { addHistoryEntry, getHistoryByCourseSession, deleteHistoryEntry } from '@/background/db';
 
 const SESSION_STORAGE_KEY = 'coursechat-session-id';
 
@@ -18,14 +18,17 @@ function createFallbackId() {
 }
 
 async function getOrCreateSessionId(): Promise<string> {
-  const existing = await chrome.storage.session.get(SESSION_STORAGE_KEY);
+  // Uses chrome.storage.local (not .session) so the id — and therefore the
+  // chat history filed under it — survives full browser restarts, not just
+  // tab closes. .session is wiped by Chrome on browser close by design.
+  const existing = await chrome.storage.local.get(SESSION_STORAGE_KEY);
   const current = existing[SESSION_STORAGE_KEY];
   if (typeof current === 'string' && current.length > 0) {
     return current;
   }
 
   const sessionId = typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : createFallbackId();
-  await chrome.storage.session.set({ [SESSION_STORAGE_KEY]: sessionId });
+  await chrome.storage.local.set({ [SESSION_STORAGE_KEY]: sessionId });
   return sessionId;
 }
 
@@ -52,6 +55,7 @@ function toHistoryResponse(item: SessionAnswerItem): RAGResponse {
 export function useSessionHistory(courseId: string) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [history, setHistory] = useState<SessionAnswerItem[]>([]);
+  const [entryIds, setEntryIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -83,17 +87,21 @@ export function useSessionHistory(courseId: string) {
     async function loadHistory() {
       if (!sessionId || !courseId) {
         setHistory([]);
+        setEntryIds([]);
         return;
       }
 
       try {
         const entries = await getHistoryByCourseSession(courseId, sessionId);
+        const sorted = entries.sort((left, right) => right.timestamp.localeCompare(left.timestamp));
         if (!cancelled) {
-          setHistory(entries.sort((left, right) => right.timestamp.localeCompare(left.timestamp)).map(toDisplayItem));
+          setHistory(sorted.map(toDisplayItem));
+          setEntryIds(sorted.map((entry) => entry.id));
         }
       } catch {
         if (!cancelled) {
           setHistory([]);
+          setEntryIds([]);
         }
       }
     }
@@ -110,8 +118,9 @@ export function useSessionHistory(courseId: string) {
       return;
     }
 
+    const id = typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : createFallbackId();
     const entry: HistoryEntry = {
-      id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : createFallbackId(),
+      id,
       courseId,
       sessionId,
       query,
@@ -121,11 +130,19 @@ export function useSessionHistory(courseId: string) {
 
     await addHistoryEntry(entry);
     setHistory((current) => [response, ...current]);
+    setEntryIds((current) => [id, ...current]);
+  }
+
+  async function clearHistory() {
+    await Promise.all(entryIds.map((id) => deleteHistoryEntry(id)));
+    setHistory([]);
+    setEntryIds([]);
   }
 
   return {
     history,
     isLoading,
     recordResponse,
+    clearHistory,
   };
 }
