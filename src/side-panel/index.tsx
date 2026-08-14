@@ -132,24 +132,42 @@ function CopyButton({ text, theme }: { text: string; theme: Theme }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
-    // Strip markdown formatting for plain text paste
+    // Convert markdown to HTML for rich paste, keep plain text as fallback
+    const html = text
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+      .replace(/^[\*\-]\s(.*)$/gm, '<li>$1</li>')
+      .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+      .replace(/`(.*?)`/g, '<code>$1</code>')
+      .replace(/\n/g, '<br>');
+    
     const plain = text
-      .replace(/\*\*(.*?)\*\*/g, '$1')  // **bold** → bold
-      .replace(/\*(.*?)\*/g, '$1')      // *italic* → italic
-      .replace(/^#{1,3}\s*/gm, '')      // ### heading → heading
-      .replace(/^[\*\-]\s/gm, '• ')     // * bullet → • bullet
-      .replace(/`(.*?)`/g, '$1');        // `code` → code
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/\*(.*?)\*/g, '$1')
+      .replace(/^[\*\-]\s/gm, '• ')
+      .replace(/`(.*?)`/g, '$1');
+
     try {
-      await navigator.clipboard.writeText(plain);
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/html': new Blob([html], { type: 'text/html' }),
+          'text/plain': new Blob([plain], { type: 'text/plain' }),
+        }),
+      ]);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      const textarea = document.createElement('textarea');
-      textarea.value = plain;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
+      // Fallback: plain text only
+      try {
+        await navigator.clipboard.writeText(plain);
+      } catch {
+        const textarea = document.createElement('textarea');
+        textarea.value = plain;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
