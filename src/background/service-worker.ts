@@ -342,8 +342,8 @@ async function processQuery(courseId: string, query: string) {
 
   // Basic validation
   const trimmed = query.trim();
-  if (trimmed.length < 3) {
-    return { type: 'ERROR', payload: { message: 'Query must be at least 3 characters.', code: 'INVALID_QUERY' } };
+  if (trimmed.length < 1) {
+    return { type: 'ERROR', payload: { message: 'Please type a question.', code: 'INVALID_QUERY' } };
   }
   if (trimmed.length > 500) {
     return { type: 'ERROR', payload: { message: 'Query must be 500 characters or fewer.', code: 'QUERY_TOO_LONG' } };
@@ -357,7 +357,7 @@ async function processQuery(courseId: string, query: string) {
 
   const context = await getCourseContext(courseId);
   if (!context) {
-    return { type: 'ERROR', payload: { message: 'No course has been indexed yet. Click "Index Course" first.', code: 'NO_INDEX' } };
+    return { type: 'ERROR', payload: { message: 'Please upload at least one PDF or file first.', code: 'NO_INDEX' } };
   }
 
   // Direct Gemini query (demo mode — bypasses Backboard.io)
