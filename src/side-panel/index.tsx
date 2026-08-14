@@ -132,14 +132,20 @@ function CopyButton({ text, theme }: { text: string; theme: Theme }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
+    // Strip markdown formatting for plain text paste
+    const plain = text
+      .replace(/\*\*(.*?)\*\*/g, '$1')  // **bold** → bold
+      .replace(/\*(.*?)\*/g, '$1')      // *italic* → italic
+      .replace(/^#{1,3}\s*/gm, '')      // ### heading → heading
+      .replace(/^[\*\-]\s/gm, '• ')     // * bullet → • bullet
+      .replace(/`(.*?)`/g, '$1');        // `code` → code
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(plain);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Fallback for environments where clipboard API is unavailable
       const textarea = document.createElement('textarea');
-      textarea.value = text;
+      textarea.value = plain;
       document.body.appendChild(textarea);
       textarea.select();
       document.execCommand('copy');
