@@ -657,7 +657,6 @@ function App() {
               {/* Copy + Delete buttons */}
               <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: `1px solid ${theme.border}`, display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                 <CopyButton text={a.answer} theme={theme} />
-                <button onClick={() => handleDeleteAnswer(i)} style={{ background: 'none', border: `1px solid ${theme.border}`, borderRadius: '6px', padding: '4px 8px', fontSize: '11px', color: theme.textMuted, cursor: 'pointer' }} title="Delete this Q&A">🗑️</button>
               </div>
             </div>
           ))}
