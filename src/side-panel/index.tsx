@@ -746,7 +746,7 @@ function App() {
             <span style={{ fontSize: '11px', color: theme.textMuted }}>{query.length}/1000</span>
           </div>
           <div style={{ fontSize: '10px', color: theme.textMuted, marginTop: '4px' }}>
-            💡 Voice typing: press {voiceTip}
+            🎤 Voice typing: click the text box above, then press {voiceTip} to dictate your question
           </div>
           {!privacyAcknowledged && <div style={{ fontSize: '11px', color: darkMode ? '#fdd835' : '#8a6d3b', marginTop: '8px' }}>Acknowledge the privacy notice above before asking a question.</div>}
         </div>
