@@ -342,8 +342,8 @@ async function processQuery(courseId: string, query: string) {
 
   // Basic validation
   const trimmed = query.trim();
-  if (trimmed.length < 3) {
-    return { type: 'ERROR', payload: { message: 'Query must be at least 3 characters.', code: 'INVALID_QUERY' } };
+  if (trimmed.length < 1) {
+    return { type: 'ERROR', payload: { message: 'Please type a question.', code: 'INVALID_QUERY' } };
   }
   if (trimmed.length > 500) {
     return { type: 'ERROR', payload: { message: 'Query must be 500 characters or fewer.', code: 'QUERY_TOO_LONG' } };

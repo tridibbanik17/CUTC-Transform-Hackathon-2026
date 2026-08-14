@@ -304,7 +304,7 @@ function App() {
   }
 
   async function handleQuery() {
-    if (!query.trim() || query.trim().length < 3) return;
+    if (!query.trim() || query.trim().length < 1) return;
     setQueryLoading(true);
     const res = await sendMessage({ type: 'PROCESS_QUERY', payload: { courseId: courseInfo?.courseId ?? 'default-course', query: query.trim() } });
     setQueryLoading(false);
@@ -479,7 +479,7 @@ function App() {
             onBlur={(e) => { e.currentTarget.style.borderColor = theme.borderLight; }}
           />
           <div style={{ display: 'flex', marginTop: '8px', justifyContent: 'space-between', alignItems: 'center' }}>
-            <button onClick={handleQuery} disabled={queryLoading || query.trim().length < 3} style={{ padding: '10px 20px', background: queryLoading || query.trim().length < 3 ? (darkMode ? '#3a5070' : '#a0c4f0') : theme.accent, color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', cursor: queryLoading ? 'wait' : 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <button onClick={handleQuery} disabled={queryLoading || query.trim().length < 1} style={{ padding: '10px 20px', background: queryLoading || query.trim().length < 1 ? (darkMode ? '#3a5070' : '#a0c4f0') : theme.accent, color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', cursor: queryLoading ? 'wait' : 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
               {queryLoading ? <><Spinner theme={theme} /> Thinking...</> : 'Ask'}
             </button>
             <span style={{ fontSize: '11px', color: theme.textFaint }}>{query.length}/1000</span>
