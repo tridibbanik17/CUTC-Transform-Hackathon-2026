@@ -223,6 +223,8 @@ function App() {
   const [keyLoading, setKeyLoading] = useState(false);
   const [query, setQuery] = useState('');
   const [queryLoading, setQueryLoading] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [speechSupported] = useState(() => 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
   const [answers, setAnswers] = useState<Array<{ query: string; answer: string; status: string; citations: any[] }>>([]);
   const [platform, setPlatform] = useState<string | null>(null);
   const [courseInfo, setCourseInfo] = useState<{ courseName: string; courseId: string } | null>(null);
@@ -382,6 +384,46 @@ function App() {
     await chrome.storage.local.remove([...keysToRemove, 'course_context_default-course', 'course_files_default-course']);
     setUploadedFiles([]); setTotalChars(0);
     setIndexResult('Cleared. Upload new files to start fresh.');
+  }
+
+  // Voice dictation
+  function handleVoiceInput() {
+    const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    if (isListening) {
+      setIsListening(false);
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    let finalTranscript = '';
+
+    recognition.onstart = () => setIsListening(true);
+    
+    recognition.onresult = (event: any) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript;
+        } else {
+          interim += event.results[i][0].transcript;
+        }
+      }
+      setQuery(finalTranscript + interim);
+    };
+
+    recognition.onerror = () => setIsListening(false);
+    recognition.onend = () => {
+      setIsListening(false);
+      if (finalTranscript) setQuery(finalTranscript);
+    };
+
+    recognition.start();
   }
 
   async function handleQuery() {
@@ -618,9 +660,17 @@ function App() {
             onBlur={(e) => { e.currentTarget.style.borderColor = theme.borderLight; }}
           />
           <div style={{ display: 'flex', marginTop: '8px', justifyContent: 'space-between', alignItems: 'center' }}>
-            <button onClick={handleQuery} disabled={queryLoading || query.trim().length < 1} style={{ padding: '10px 20px', background: queryLoading || query.trim().length < 1 ? (darkMode ? '#3a5070' : '#a0c4f0') : '#1a73e8', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', cursor: queryLoading ? 'wait' : 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-              {queryLoading ? <><Spinner /> Thinking...</> : 'Ask'}
-            </button>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <button onClick={handleQuery} disabled={queryLoading || query.trim().length < 1} style={{ padding: '10px 20px', background: queryLoading || query.trim().length < 1 ? (darkMode ? '#3a5070' : '#a0c4f0') : '#1a73e8', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', cursor: queryLoading ? 'wait' : 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {queryLoading ? <><Spinner /> Thinking...</> : 'Ask'}
+              </button>
+              {speechSupported && (
+                <button onClick={handleVoiceInput} style={{ padding: '10px 12px', background: isListening ? '#d93025' : (darkMode ? '#2d3748' : '#f1f3f4'), color: isListening ? '#fff' : theme.text, border: `1px solid ${isListening ? '#d93025' : theme.border}`, borderRadius: '8px', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'all 0.2s' }} title={isListening ? 'Stop listening' : 'Voice input'}>
+                  {isListening ? '⏹️' : '🎤'}
+                </button>
+              )}
+            </div>
+            <span style={{ fontSize: '11px', color: theme.textMuted }}>{query.length}/1000</span>
           </div>
           {!privacyAcknowledged && <div style={{ fontSize: '11px', color: darkMode ? '#fdd835' : '#8a6d3b', marginTop: '8px' }}>Acknowledge the privacy notice above before asking a question.</div>}
         </div>
