@@ -298,23 +298,27 @@ function App() {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     setIndexing(true); setIndexResult(null);
-    let allText = '';
     let filesProcessed = 0;
     let skipped = 0;
     const newFileNames: string[] = [];
 
     for (const file of Array.from(files)) {
-      // Reject duplicates
       if (uploadedFiles.includes(file.name)) { skipped++; continue; }
       try {
+        let text = '';
         if (file.name.endsWith('.pdf')) {
           const buffer = await file.arrayBuffer();
-          const text = await parsePdfInIframe(buffer);
-          if (text.length > 0) { allText += `\n\n[${file.name}]\n${text}`; filesProcessed++; newFileNames.push(file.name); }
-          else { setIndexResult(`✗ PDF "${file.name}" could not be parsed.`); }
+          text = await parsePdfInIframe(buffer);
         } else {
-          const text = await file.text();
-          if (text.trim().length > 0) { allText += `\n\n[${file.name}]\n${text.trim()}`; filesProcessed++; newFileNames.push(file.name); }
+          text = (await file.text()).trim();
+        }
+        if (text.length > 0) {
+          // Store each file individually
+          await chrome.storage.local.set({ [`file_text_${file.name}`]: text });
+          filesProcessed++;
+          newFileNames.push(file.name);
+        } else {
+          setIndexResult(`✗ "${file.name}" could not be parsed.`);
         }
       } catch (err) { console.error(`Failed: ${file.name}`, err); }
     }
@@ -324,56 +328,58 @@ function App() {
       setIndexing(false); e.target.value = ''; return;
     }
 
-    if (allText.length > 0) {
-      // Append new text to existing context
-      const existing = await new Promise<string>((resolve) => {
-        chrome.storage.local.get('course_context_default-course', (r) => resolve(r['course_context_default-course'] || ''));
-      });
-      const combined = (existing + allText).slice(0, 80000);
+    if (filesProcessed > 0) {
       const allFileNames = [...uploadedFiles, ...newFileNames];
-      await chrome.storage.local.set({
-        'course_context_default-course': combined,
-        'course_files_default-course': allFileNames,
-      });
-      setTotalChars(combined.length);
+      await chrome.storage.local.set({ 'course_files_default-course': allFileNames });
       setUploadedFiles(allFileNames);
+      // Rebuild combined context
+      await rebuildContext(allFileNames);
       let msg = `✓ Uploaded ${filesProcessed} file(s). Ready to answer questions!`;
-      if (combined.length >= 80000 && (existing + allText).length > 80000) {
-        msg += ' (some content truncated — 80k limit)';
-      }
+      if (skipped > 0) msg += ` (${skipped} duplicate(s) skipped)`;
+      if (totalChars >= 80000) msg += ' (80k limit reached — some content may be truncated)';
       setIndexResult(msg);
     } else if (!indexResult) { setIndexResult('✗ Could not extract text from uploaded files.'); }
     setIndexing(false); e.target.value = '';
   }
 
-  // Delete individual file — removes its text from context and updates char count
+  // Rebuild combined context from individually stored files
+  async function rebuildContext(fileNames: string[]) {
+    const keys = fileNames.map(f => `file_text_${f}`);
+    const result = await new Promise<Record<string, string>>((resolve) => {
+      chrome.storage.local.get(keys, (r) => resolve(r as Record<string, string>));
+    });
+    let combined = '';
+    for (const f of fileNames) {
+      const text = result[`file_text_${f}`] || '';
+      if (text) combined += `\n\n[${f}]\n${text}`;
+    }
+    const capped = combined.slice(0, 80000);
+    await chrome.storage.local.set({ 'course_context_default-course': capped });
+    setTotalChars(capped.length);
+  }
+
+  // Delete individual file
   async function handleDeleteFile(fileName: string) {
     const newFiles = uploadedFiles.filter(f => f !== fileName);
     setUploadedFiles(newFiles);
+    // Remove the file's stored text
+    await chrome.storage.local.remove(`file_text_${fileName}`);
     
     if (newFiles.length === 0) {
       await chrome.storage.local.remove(['course_context_default-course', 'course_files_default-course']);
       setTotalChars(0);
       setIndexResult(null);
     } else {
-      // Remove deleted file's section from context
-      const existing = await new Promise<string>((resolve) => {
-        chrome.storage.local.get('course_context_default-course', (r) => resolve(r['course_context_default-course'] || ''));
-      });
-      const escapedName = fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(`\\n\\n\\[${escapedName}\\][\\s\\S]*?(?=\\n\\n\\[|$)`, 'g');
-      const cleaned = existing.replace(regex, '');
-      await chrome.storage.local.set({
-        'course_context_default-course': cleaned,
-        'course_files_default-course': newFiles,
-      });
-      setTotalChars(cleaned.length);
+      await chrome.storage.local.set({ 'course_files_default-course': newFiles });
+      await rebuildContext(newFiles);
       setIndexResult(null);
     }
   }
 
   async function handleClearContext() {
-    await chrome.storage.local.remove('course_context_default-course');
+    // Remove all file texts + context
+    const keysToRemove = uploadedFiles.map(f => `file_text_${f}`);
+    await chrome.storage.local.remove([...keysToRemove, 'course_context_default-course', 'course_files_default-course']);
     setUploadedFiles([]); setTotalChars(0);
     setIndexResult('Cleared. Upload new files to start fresh.');
   }
