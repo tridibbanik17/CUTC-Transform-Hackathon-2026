@@ -520,7 +520,7 @@ function App() {
             <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
               {uploadedFiles.map((f, i) => (
                 <div key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 10px', background: darkMode ? '#2d3748' : '#f0f4f8', border: `1px solid ${darkMode ? '#4a5568' : '#e2e8f0'}`, borderRadius: '20px', fontSize: '11px', color: theme.text, maxWidth: '100%' }}>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📄 {f}</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f}>📄 {f}</span>
                   <button onClick={() => handleDeleteFile(f)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: darkMode ? '#fc8181' : '#e53e3e', padding: '0', lineHeight: 1, flexShrink: 0 }} title="Remove file">×</button>
                 </div>
               ))}
