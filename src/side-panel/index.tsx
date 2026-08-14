@@ -367,7 +367,7 @@ function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `coursechat-export-${new Date().toISOString().slice(0, 10)}.md`;
+    a.download = `coursechat-${answers.length > 0 ? answers[answers.length - 1].query.slice(0, 30).replace(/[^a-zA-Z0-9 ]/g, '').trim().replace(/\s+/g, '-').toLowerCase() : 'chat'}-${new Date().toLocaleTimeString('en-US', { hour12: false }).replace(/:/g, '')}.md`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
