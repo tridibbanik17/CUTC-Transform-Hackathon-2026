@@ -112,12 +112,37 @@ function CopyButton({ text, theme }: { text: string; theme: Theme }) {
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
+    // Convert markdown to HTML for rich paste (Word/Docs), keep plain text as fallback
+    const html = text
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/^\* /gm, '• ')
+      .replace(/^\- /gm, '• ')
+      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+      .replace(/^• (.*)$/gm, '<li>$1</li>')
+      .replace(/`(.*?)`/g, '<code>$1</code>')
+      .replace(/\n/g, '<br>');
+    
+    const plain = text
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/^\* /gm, '• ')
+      .replace(/^\- /gm, '• ')
+      .replace(/\*(.*?)\*/g, '$1')
+      .replace(/`(.*?)`/g, '$1');
+
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/html': new Blob([html], { type: 'text/html' }),
+          'text/plain': new Blob([plain], { type: 'text/plain' }),
+        }),
+      ]);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
-      setCopied(false);
+      // Fallback: plain text only
+      try { await navigator.clipboard.writeText(plain); } catch {}
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
     }
   }
 
