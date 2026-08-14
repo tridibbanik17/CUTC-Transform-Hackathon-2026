@@ -630,8 +630,9 @@ function App() {
       {answers.length > 0 && (
         <div>
           {answers.map((a, i) => (
-            <div key={i} style={{ marginBottom: '16px', padding: '14px', background: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: '12px', boxShadow: `0 1px 3px ${theme.shadow}` }}>
-              <div style={{ fontSize: '13px', fontWeight: 600, color: theme.text, marginBottom: '8px' }}>Q: {a.query}</div>
+            <div key={i} style={{ marginBottom: '16px', padding: '14px', background: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: '12px', boxShadow: `0 1px 3px ${theme.shadow}`, position: 'relative' as const }}>
+              <button onClick={() => { const updated = answers.filter((_, idx) => idx !== i); setAnswers(updated); persistHistory(updated); }} style={{ position: 'absolute' as const, top: '8px', right: '8px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', color: theme.textMuted, opacity: 0.6 }} title="Delete this Q&A">✕</button>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: theme.text, marginBottom: '8px', paddingRight: '20px' }}>Q: {a.query}</div>
               <div style={{ fontSize: '13px', lineHeight: 1.6, color: darkMode ? '#ccc' : '#333' }}>
                 {a.status === 'success' && <FormattedAnswer text={a.answer} />}
                 {a.status === 'low_confidence' && (
@@ -653,9 +654,10 @@ function App() {
                   ))}
                 </div>
               )}
-              {/* Copy button */}
-              <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: `1px solid ${theme.border}`, display: 'flex', justifyContent: 'flex-end' }}>
+              {/* Copy + Delete buttons */}
+              <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: `1px solid ${theme.border}`, display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                 <CopyButton text={a.answer} theme={theme} />
+                <button onClick={() => handleDeleteAnswer(i)} style={{ background: 'none', border: `1px solid ${theme.border}`, borderRadius: '6px', padding: '4px 8px', fontSize: '11px', color: theme.textMuted, cursor: 'pointer' }} title="Delete this Q&A">🗑️</button>
               </div>
             </div>
           ))}
