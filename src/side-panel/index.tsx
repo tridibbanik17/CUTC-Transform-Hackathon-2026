@@ -241,6 +241,12 @@ function Spinner() {
 }
 
 // --- App ---
+const voiceTip = navigator.platform.includes('Mac') 
+  ? 'Fn Fn or Cmd+Control+Space (Mac)' 
+  : navigator.platform.includes('Linux') 
+    ? 'Super key or IBus (Linux)' 
+    : 'Win+H (Windows)';
+
 function App() {
   const [apiKey, setApiKey] = useState('');
   const [maskedKey, setMaskedKey] = useState<string | null>(null);
