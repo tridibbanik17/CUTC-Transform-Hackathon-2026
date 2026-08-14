@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { FormattedAnswer } from './components/FormattedAnswer';
 import { PrivacyNotice, PRIVACY_NOTICE_SESSION_KEY } from './components/PrivacyNotice';
 import { Spinner } from './components/Spinner';
+import { NotificationArea, type NotificationItem } from './components/NotificationArea';
+import { useSessionHistory } from './hooks/useSessionHistory';
 
 // --- PDF Parser using sandboxed iframe ---
 function parsePdfInIframe(buffer: ArrayBuffer): Promise<string> {
@@ -38,7 +40,6 @@ function App() {
   const [keyLoading, setKeyLoading] = useState(false);
   const [query, setQuery] = useState('');
   const [queryLoading, setQueryLoading] = useState(false);
-  const [answers, setAnswers] = useState<Array<{ query: string; answer: string; status: string; citations: any[] }>>([]);
   const [platform, setPlatform] = useState<string | null>(null);
   const [courseInfo, setCourseInfo] = useState<{ courseName: string; courseId: string } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -47,6 +48,8 @@ function App() {
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
   const [totalChars, setTotalChars] = useState(0);
   const [privacyAcknowledged, setPrivacyAcknowledged] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const { history: answers, recordResponse } = useSessionHistory(courseInfo?.courseId ?? 'default-course');
 
   useEffect(() => {
     sendMessage({ type: 'GET_API_KEY_STATUS' }).then((res) => {
@@ -59,11 +62,9 @@ function App() {
       if (res?.payload) setCourseInfo(res.payload);
     });
     // Check existing context
-    chrome.storage.local.get(['course_context_default-course', 'course_files_default-course'], (r) => {
+    chrome.storage.local.get('course_context_default-course', (r) => {
       const ctx = r['course_context_default-course'] || '';
       if (ctx.length > 0) setTotalChars(ctx.length);
-      const files = r['course_files_default-course'] || [];
-      if (files.length > 0) setUploadedFiles(files);
     });
     chrome.storage.session.get(PRIVACY_NOTICE_SESSION_KEY, (result) => {
       setPrivacyAcknowledged(Boolean(result[PRIVACY_NOTICE_SESSION_KEY]));
@@ -122,20 +123,16 @@ function App() {
 
     if (allText.length > 0) {
       const capped = allText.slice(0, 80000);
-      const allFileNames = [...uploadedFiles, ...newFileNames];
-      await chrome.storage.local.set({
-        'course_context_default-course': capped,
-        'course_files_default-course': allFileNames,
-      });
+      await chrome.storage.local.set({ ['course_context_default-course']: capped });
       setTotalChars(capped.length);
-      setUploadedFiles(allFileNames);
+      setUploadedFiles((prev) => [...prev, ...newFileNames]);
       setIndexResult(`✓ Uploaded ${filesProcessed} file(s). Ready to answer questions!`);
     } else if (!indexResult) { setIndexResult('✗ Could not extract text from uploaded files.'); }
     setIndexing(false); e.target.value = '';
   }
 
   async function handleClearContext() {
-    await chrome.storage.local.remove(['course_context_default-course', 'course_files_default-course']);
+    await chrome.storage.local.remove('course_context_default-course');
     setUploadedFiles([]); setTotalChars(0);
     setIndexResult('🗑️ Cleared. Upload new files to start fresh.');
   }
@@ -149,9 +146,19 @@ function App() {
     const res = await sendMessage({ type: 'PROCESS_QUERY', payload: { courseId: courseInfo?.courseId ?? 'default-course', query: query.trim() } });
     setQueryLoading(false);
     if (res?.type === 'QUERY_RESPONSE') {
-      setAnswers((prev) => [{ query: query.trim(), answer: res.payload.answer, status: res.payload.status, citations: res.payload.citations }, ...prev]);
+      await recordResponse(query.trim(), {
+        query: query.trim(),
+        answer: res.payload.answer,
+        status: res.payload.status,
+        citations: res.payload.citations,
+      });
     } else if (res?.type === 'ERROR') {
-      setAnswers((prev) => [{ query: query.trim(), answer: res.payload.message, status: 'error', citations: [] }, ...prev]);
+      await recordResponse(query.trim(), {
+        query: query.trim(),
+        answer: res.payload.message,
+        status: 'error',
+        citations: []
+      });
     }
     setQuery('');
   }
@@ -243,7 +250,7 @@ function App() {
           {/* Files indexed counter */}
           {hasContent && (
             <div style={{ marginTop: '8px', padding: '8px 12px', background: '#e8f5e9', borderRadius: '8px', fontSize: '12px', color: '#2e7d32' }}>
-              📚 {uploadedFiles.length > 0 ? `${uploadedFiles.length} file${uploadedFiles.length !== 1 ? 's' : ''}` : 'Content ready'} | {(totalChars / 1000).toFixed(1)}k chars indexed
+              📚 {uploadedFiles.length} file{uploadedFiles.length !== 1 ? 's' : ''} | {(totalChars / 1000).toFixed(1)}k chars indexed
             </div>
           )}
 
