@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PrivacyNotice, PRIVACY_NOTICE_SESSION_KEY } from './components/PrivacyNotice';
 
+const CHAT_HISTORY_KEY = 'coursechat-chat-history';
+
 const STORAGE_KEYS = {
   darkMode: 'coursechat-dark-mode',
   chatHistory: 'coursechat-chat-history',
@@ -259,6 +261,21 @@ function App() {
   const [isListening, setIsListening] = useState(false);
   const [speechSupported] = useState(false); // Removed: use OS voice typing instead
   const [answers, setAnswers] = useState<Array<{ query: string; answer: string; status: string; citations: any[] }>>([]);
+
+  // Persist chat history to chrome.storage.local
+  function persistHistory(history: typeof answers) {
+    chrome.storage.local.set({ [CHAT_HISTORY_KEY]: history });
+  }
+
+  // Load persisted chat history on mount
+  useEffect(() => {
+    chrome.storage.local.get(CHAT_HISTORY_KEY, (r) => {
+      const saved = r[CHAT_HISTORY_KEY];
+      if (Array.isArray(saved) && saved.length > 0) {
+        setAnswers(saved);
+      }
+    });
+  }, []);
   const [platform, setPlatform] = useState<string | null>(null);
   const [courseInfo, setCourseInfo] = useState<{ courseName: string; courseId: string } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -272,7 +289,7 @@ function App() {
   const theme = darkMode ? darkTheme : lightTheme;
 
   useEffect(() => {
-    chrome.storage.session.get([PRIVACY_NOTICE_SESSION_KEY], (result) => {
+    chrome.storage.local.get([PRIVACY_NOTICE_SESSION_KEY], (result) => {
       setPrivacyAcknowledged(Boolean(result[PRIVACY_NOTICE_SESSION_KEY]));
     });
 
@@ -306,7 +323,7 @@ function App() {
   }
 
   function handleAcknowledgePrivacyNotice() {
-    chrome.storage.session.set({ [PRIVACY_NOTICE_SESSION_KEY]: true }).catch(() => {});
+    chrome.storage.local.set({ [PRIVACY_NOTICE_SESSION_KEY]: true }).catch(() => {});
     setPrivacyAcknowledged(true);
   }
 
@@ -498,9 +515,11 @@ function App() {
     const res = await sendMessage({ type: 'PROCESS_QUERY', payload: { courseId: courseInfo?.courseId ?? 'default-course', query: query.trim() } });
     setQueryLoading(false);
     if (res?.type === 'QUERY_RESPONSE') {
-      setAnswers((prev) => [{ query: query.trim(), answer: res.payload.answer, status: res.payload.status, citations: res.payload.citations }, ...prev]);
+      const entry = { query: query.trim(), answer: res.payload.answer, status: res.payload.status, citations: res.payload.citations };
+      setAnswers((prev) => { const updated = [entry, ...prev]; persistHistory(updated); return updated; });
     } else if (res?.type === 'ERROR') {
-      setAnswers((prev) => [{ query: query.trim(), answer: res.payload.message, status: 'error', citations: [] }, ...prev]);
+      const entry = { query: query.trim(), answer: res.payload.message, status: 'error', citations: [] };
+      setAnswers((prev) => { const updated = [entry, ...prev]; persistHistory(updated); return updated; });
     }
     setQuery('');
   }
@@ -618,7 +637,7 @@ function App() {
               padding: 0,
             }}
           >
-            <GearIcon />
+            ⚙️
           </button>
         </div>
       </div>
