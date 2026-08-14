@@ -135,16 +135,19 @@ function CopyButton({ text, theme }: { text: string; theme: Theme }) {
     // Convert markdown to HTML for rich paste, keep plain text as fallback
     const html = text
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/^\* /gm, '• ')
+      .replace(/^\- /gm, '• ')
       .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      .replace(/^[\*\-]\s(.*)$/gm, '<li>$1</li>')
+      .replace(/^• (.*)$/gm, '<li>$1</li>')
       .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
       .replace(/`(.*?)`/g, '<code>$1</code>')
       .replace(/\n/g, '<br>');
     
     const plain = text
       .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/^\* /gm, '• ')
+      .replace(/^\- /gm, '• ')
       .replace(/\*(.*?)\*/g, '$1')
-      .replace(/^[\*\-]\s/gm, '• ')
       .replace(/`(.*?)`/g, '$1');
 
     try {
