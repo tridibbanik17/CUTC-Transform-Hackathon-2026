@@ -502,7 +502,7 @@ function App() {
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleQuery(); }
+    if (e.key === 'Enter' && !e.shiftKey && privacyAcknowledged) { e.preventDefault(); handleQuery(); }
   }
 
   const hasContent = totalChars > 0 || uploadedFiles.length > 0;
@@ -675,7 +675,7 @@ function App() {
           />
           <div style={{ display: 'flex', marginTop: '8px', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <button onClick={handleQuery} disabled={queryLoading || query.trim().length < 1} style={{ padding: '10px 20px', background: queryLoading || query.trim().length < 1 ? (darkMode ? '#3a5070' : '#a0c4f0') : '#1a73e8', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', cursor: queryLoading ? 'wait' : 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button onClick={handleQuery} disabled={queryLoading || query.trim().length < 1 || !privacyAcknowledged} style={{ padding: '10px 20px', background: queryLoading || query.trim().length < 1 || !privacyAcknowledged ? (darkMode ? '#3a5070' : '#a0c4f0') : '#1a73e8', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', cursor: queryLoading ? 'wait' : 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
                 {queryLoading ? <><Spinner /> Thinking...</> : 'Ask'}
               </button>
               {speechSupported && (
