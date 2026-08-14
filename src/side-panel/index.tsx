@@ -564,9 +564,9 @@ function App() {
       {hasKey && (
         <div style={{ marginBottom: '16px' }}>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <label style={{ padding: '9px 16px', background: theme.accent, color: '#fff', borderRadius: '8px', fontSize: '13px', cursor: 'pointer', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-              {indexing ? <><Spinner /> Processing...</> : 'Upload PDF/file'}
-              <input type="file" accept=".pdf,.pptx,.docx,.txt,.md,.py,.java,.js,.cpp,.c,.css,.csv,.ipynb,.html,.doc,.odt,.m" multiple style={{ display: 'none' }} onChange={handleFileUpload} disabled={indexing} />
+            <label style={{ padding: '9px 16px', background: totalChars >= 80000 ? (darkMode ? '#4a5568' : '#a0aec0') : theme.accent, color: '#fff', borderRadius: '8px', fontSize: '13px', cursor: totalChars >= 80000 ? 'not-allowed' : 'pointer', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '6px', opacity: totalChars >= 80000 ? 0.6 : 1 }}>
+              {indexing ? <><Spinner /> Processing...</> : totalChars >= 80000 ? '⚠️ Limit reached' : 'Upload PDF/file'}
+              <input type="file" accept=".pdf,.pptx,.docx,.txt,.md,.py,.java,.js,.cpp,.c,.css,.csv,.ipynb,.html,.doc,.odt,.m" multiple style={{ display: 'none' }} onChange={handleFileUpload} disabled={indexing || totalChars >= 80000} />
             </label>
             {hasContent && (
               <button onClick={handleClearContext} style={{ padding: '9px 12px', background: theme.hoverBg, color: theme.textSecondary, border: `1px solid ${theme.border}`, borderRadius: '8px', fontSize: '12px', cursor: 'pointer' }}>Clear files</button>
