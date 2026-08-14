@@ -357,7 +357,7 @@ async function processQuery(courseId: string, query: string) {
 
   const context = await getCourseContext(courseId);
   if (!context) {
-    return { type: 'ERROR', payload: { message: 'No course has been indexed yet. Click "Index Course" first.', code: 'NO_INDEX' } };
+    return { type: 'ERROR', payload: { message: 'Please upload at least one PDF or file first.', code: 'NO_INDEX' } };
   }
 
   // Direct Gemini query (demo mode — bypasses Backboard.io)
