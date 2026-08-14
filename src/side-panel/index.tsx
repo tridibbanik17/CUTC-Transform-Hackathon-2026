@@ -338,19 +338,29 @@ function App() {
     setIndexing(false); e.target.value = '';
   }
 
-  // Delete individual file
+  // Delete individual file — removes its text from context and updates char count
   async function handleDeleteFile(fileName: string) {
     const newFiles = uploadedFiles.filter(f => f !== fileName);
-    // Re-read context — we can't selectively remove text, so we just update the file list
-    // The context still contains the text but it won't cause harm
-    // For a clean approach, we'd need to re-extract all remaining files
-    // For now, just update the file list display
-    await chrome.storage.local.set({ 'course_files_default-course': newFiles });
     setUploadedFiles(newFiles);
+    
     if (newFiles.length === 0) {
       await chrome.storage.local.remove(['course_context_default-course', 'course_files_default-course']);
       setTotalChars(0);
-      setIndexResult('All files removed. Upload new files to start.');
+      setIndexResult(null);
+    } else {
+      // Remove deleted file's section from context
+      const existing = await new Promise<string>((resolve) => {
+        chrome.storage.local.get('course_context_default-course', (r) => resolve(r['course_context_default-course'] || ''));
+      });
+      const escapedName = fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`\\n\\n\\[${escapedName}\\][\\s\\S]*?(?=\\n\\n\\[|$)`, 'g');
+      const cleaned = existing.replace(regex, '');
+      await chrome.storage.local.set({
+        'course_context_default-course': cleaned,
+        'course_files_default-course': newFiles,
+      });
+      setTotalChars(cleaned.length);
+      setIndexResult(null);
     }
   }
 
