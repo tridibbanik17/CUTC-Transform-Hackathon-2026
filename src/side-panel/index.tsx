@@ -443,7 +443,7 @@ function App() {
           await chrome.tabs.sendMessage(tabId, { type: 'START_SPEECH' });
         } catch {
           setIsListening(false);
-          setIndexResult('🎤 Voice input requires a regular web page (not chrome:// pages). Open any website tab and try again.');
+          setIndexResult('🎤 Voice input unavailable on this page. Try on your LMS page or use Win+H for Windows voice typing.');
         }
       }
     });
@@ -461,18 +461,28 @@ function App() {
           const ta = document.querySelector('textarea') as HTMLTextAreaElement;
           if (ta) { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 200) + 'px'; }
         }, 50);
+        clearTimeout(speechTimeout);
       } else if (message.type === 'SPEECH_END') {
         setIsListening(false);
         chrome.runtime.onMessage.removeListener(listener);
+        clearTimeout(speechTimeout);
       } else if (message.type === 'SPEECH_ERROR') {
         setIsListening(false);
         chrome.runtime.onMessage.removeListener(listener);
-        if (message.error === 'not-allowed' || message.error === 'not-supported') {
-          setIndexResult('🎤 Voice input requires a regular web page. Open any website tab and try again.');
-        }
+        clearTimeout(speechTimeout);
+        setIndexResult('🎤 Voice input unavailable on this page. Try on your LMS page or use Win+H for Windows voice typing.');
       }
     };
     chrome.runtime.onMessage.addListener(listener);
+
+    // Timeout: if no response in 3s, show error (CSP likely blocked it)
+    const speechTimeout = setTimeout(() => {
+      if (isListening) {
+        setIsListening(false);
+        chrome.runtime.onMessage.removeListener(listener);
+        setIndexResult('🎤 Voice input unavailable on this page. Try on your LMS page or use Win+H for Windows voice typing.');
+      }
+    }, 3000);
   }
 
   async function handleQuery() {
