@@ -140,6 +140,17 @@ function MoonIcon() {
   );
 }
 
+function GearIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
+      <path
+        d="M19.4 13.5c.1-.5.1-1 0-1.5l1.7-1.3-1.7-3-2 .7c-.4-.4-.8-.7-1.3-1l-.3-2.1h-3.4l-.3 2.1c-.5.2-.9.6-1.3 1l-2-.7-1.7 3 1.7 1.3c-.1.5-.1 1 0 1.5L5.8 14.8l1.7 3 2-.7c.4.4.8.7 1.3 1l.3 2.1h3.4l.3-2.1c.5-.2.9-.6 1.3-1l2 .7 1.7-3-1.7-1.3ZM12 15.3A3.3 3.3 0 1 1 12 8.7a3.3 3.3 0 0 1 0 6.6Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
 // --- PDF Parser using sandboxed iframe ---
 function parsePdfInIframe(buffer: ArrayBuffer): Promise<string> {
   return new Promise((resolve) => {
@@ -474,7 +485,7 @@ function App() {
               padding: 0,
             }}
           >
-            <span aria-hidden="true" style={{ fontSize: '16px', lineHeight: 1 }}>⚙️</span>
+            <GearIcon />
           </button>
         </div>
       </div>
