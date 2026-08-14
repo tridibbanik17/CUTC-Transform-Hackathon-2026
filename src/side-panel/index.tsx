@@ -27,6 +27,8 @@ type Theme = {
   hoverBg: string;
   cardBg: string;
   shadow: string;
+  indexedBg: string;
+  indexedText: string;
 };
 
 const lightTheme: Theme = {
@@ -49,6 +51,8 @@ const lightTheme: Theme = {
   hoverBg: '#eef2f7',
   cardBg: '#ffffff',
   shadow: 'rgba(0,0,0,0.08)',
+  indexedBg: '#e8f5e9',
+  indexedText: '#2e7d32',
 };
 
 const darkTheme: Theme = {
@@ -71,6 +75,8 @@ const darkTheme: Theme = {
   hoverBg: '#1f2937',
   cardBg: '#111827',
   shadow: 'rgba(0,0,0,0.35)',
+  indexedBg: '#0f2a1a',
+  indexedText: '#86efac',
 };
 
 function CopyButton({ text, theme }: { text: string; theme: Theme }) {
