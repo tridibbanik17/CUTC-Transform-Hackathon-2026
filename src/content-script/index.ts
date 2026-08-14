@@ -280,53 +280,60 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       sendResponse({ payload: { platformName: activePlatformName } });
       break;
 
-    case 'STOP_SPEECH':
-      if ((window as any).__ccRecognition) {
-        try { (window as any).__ccRecognition.stop(); } catch {}
-        (window as any).__ccRecognition = null;
-      }
+    case 'START_SPEECH':
+      // Inject speech recognition into page's MAIN world via script tag
+      (() => {
+        const script = document.createElement('script');
+        script.textContent = `
+          (function() {
+            if (window.__ccRecognition) { try { window.__ccRecognition.stop(); } catch {} }
+            var SR = window.webkitSpeechRecognition || window.SpeechRecognition;
+            if (!SR) { document.dispatchEvent(new CustomEvent('__cc_speech', {detail: {type:'error', error:'not-supported'}})); return; }
+            var r = new SR();
+            r.continuous = true;
+            r.interimResults = true;
+            r.lang = 'en-US';
+            window.__ccRecognition = r;
+            r.onresult = function(e) {
+              var final = '', interim = '';
+              for (var i = 0; i < e.results.length; i++) {
+                if (e.results[i].isFinal) final += e.results[i][0].transcript + ' ';
+                else interim += e.results[i][0].transcript;
+              }
+              document.dispatchEvent(new CustomEvent('__cc_speech', {detail: {type:'result', text: (final + interim).trim()}}));
+            };
+            r.onerror = function(e) { document.dispatchEvent(new CustomEvent('__cc_speech', {detail: {type:'error', error: e.error}})); };
+            r.onend = function() { document.dispatchEvent(new CustomEvent('__cc_speech', {detail: {type:'end'}})); };
+            r.start();
+          })();
+        `;
+        document.head.appendChild(script);
+        script.remove();
+
+        // Listen for results from the page
+        const handler = (e: any) => {
+          const d = e.detail;
+          if (d.type === 'result') {
+            chrome.runtime.sendMessage({ type: 'SPEECH_RESULT', text: d.text });
+          } else if (d.type === 'error') {
+            chrome.runtime.sendMessage({ type: 'SPEECH_ERROR', error: d.error });
+            document.removeEventListener('__cc_speech', handler);
+          } else if (d.type === 'end') {
+            chrome.runtime.sendMessage({ type: 'SPEECH_END' });
+            document.removeEventListener('__cc_speech', handler);
+          }
+        };
+        document.addEventListener('__cc_speech', handler);
+      })();
       sendResponse({ payload: null });
       break;
 
-    case 'START_SPEECH':
+    case 'STOP_SPEECH':
       (() => {
-        const SR = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
-        if (!SR) {
-          chrome.runtime.sendMessage({ type: 'SPEECH_ERROR', error: 'not-supported' });
-          sendResponse({ payload: null });
-          return;
-        }
-
-        // Stop previous
-        if ((window as any).__ccRecognition) {
-          try { (window as any).__ccRecognition.stop(); } catch {}
-        }
-
-        const recognition = new SR();
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.lang = 'en-US';
-        (window as any).__ccRecognition = recognition;
-
-        recognition.onresult = (event: any) => {
-          let final = '';
-          let interim = '';
-          for (let i = 0; i < event.results.length; i++) {
-            if (event.results[i].isFinal) final += event.results[i][0].transcript + ' ';
-            else interim += event.results[i][0].transcript;
-          }
-          chrome.runtime.sendMessage({ type: 'SPEECH_RESULT', text: (final + interim).trim() });
-        };
-
-        recognition.onerror = (e: any) => {
-          chrome.runtime.sendMessage({ type: 'SPEECH_ERROR', error: e.error });
-        };
-
-        recognition.onend = () => {
-          chrome.runtime.sendMessage({ type: 'SPEECH_END' });
-        };
-
-        recognition.start();
+        const script = document.createElement('script');
+        script.textContent = `if(window.__ccRecognition){try{window.__ccRecognition.stop();}catch{}window.__ccRecognition=null;}`;
+        document.head.appendChild(script);
+        script.remove();
       })();
       sendResponse({ payload: null });
       break;
