@@ -257,7 +257,7 @@ function App() {
   const [query, setQuery] = useState('');
   const [queryLoading, setQueryLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [speechSupported] = useState(true); // Uses content script injection for mic access
+  const [speechSupported] = useState(false); // Removed: use OS voice typing instead
   const [answers, setAnswers] = useState<Array<{ query: string; answer: string; status: string; citations: any[] }>>([]);
   const [platform, setPlatform] = useState<string | null>(null);
   const [courseInfo, setCourseInfo] = useState<{ courseName: string; courseId: string } | null>(null);
@@ -744,6 +744,9 @@ function App() {
               )}
             </div>
             <span style={{ fontSize: '11px', color: theme.textMuted }}>{query.length}/1000</span>
+          </div>
+          <div style={{ fontSize: '10px', color: theme.textMuted, marginTop: '4px' }}>
+            💡 Voice typing: press {voiceTip}
           </div>
           {!privacyAcknowledged && <div style={{ fontSize: '11px', color: darkMode ? '#fdd835' : '#8a6d3b', marginTop: '8px' }}>Acknowledge the privacy notice above before asking a question.</div>}
         </div>
