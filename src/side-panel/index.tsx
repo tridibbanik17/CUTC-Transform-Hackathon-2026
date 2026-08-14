@@ -393,34 +393,47 @@ function App() {
 
     if (isListening) {
       setIsListening(false);
+      // Stop any active recognition
+      if ((window as any).__coursechat_recognition) {
+        (window as any).__coursechat_recognition.stop();
+        (window as any).__coursechat_recognition = null;
+      }
       return;
     }
 
     const recognition = new SpeechRecognition();
-    recognition.continuous = false;
+    recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = 'en-US';
+    (window as any).__coursechat_recognition = recognition;
 
-    let finalTranscript = '';
+    let finalTranscript = query; // Start with existing text
 
     recognition.onstart = () => setIsListening(true);
     
     recognition.onresult = (event: any) => {
       let interim = '';
+      let newFinal = '';
       for (let i = event.resultIndex; i < event.results.length; i++) {
         if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript;
+          newFinal += event.results[i][0].transcript;
         } else {
           interim += event.results[i][0].transcript;
         }
       }
-      setQuery(finalTranscript + interim);
+      if (newFinal) finalTranscript += (finalTranscript ? ' ' : '') + newFinal;
+      setQuery(finalTranscript + (interim ? ' ' + interim : ''));
     };
 
-    recognition.onerror = () => setIsListening(false);
+    recognition.onerror = (e: any) => {
+      console.error('Speech recognition error:', e.error);
+      setIsListening(false);
+      (window as any).__coursechat_recognition = null;
+    };
+    
     recognition.onend = () => {
       setIsListening(false);
-      if (finalTranscript) setQuery(finalTranscript);
+      (window as any).__coursechat_recognition = null;
     };
 
     recognition.start();
@@ -499,6 +512,7 @@ function App() {
       {/* Animations */}
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
         body { margin: 0; background: ${theme.bg}; }
       `}</style>
 
@@ -653,9 +667,9 @@ function App() {
         <div style={{ marginBottom: '16px' }}>
           <label style={{ fontSize: '12px', fontWeight: 600, color: theme.textSecondary, display: 'block', marginBottom: '6px' }}>Ask a question about your course.</label>
           <textarea
-            style={{ width: '100%', padding: '10px 12px', border: `2px solid ${theme.borderLight}`, borderRadius: '10px', fontSize: '14px', minHeight: '64px', resize: 'vertical' as const, boxSizing: 'border-box' as const, transition: 'border-color 0.2s', outline: 'none', background: theme.inputBg, color: theme.text }}
+            style={{ width: '100%', padding: '10px 12px', border: `2px solid ${theme.borderLight}`, borderRadius: '10px', fontSize: '14px', minHeight: '48px', maxHeight: '200px', resize: 'none' as const, boxSizing: 'border-box' as const, transition: 'border-color 0.2s', outline: 'none', background: theme.inputBg, color: theme.text, overflow: 'auto' }}
             placeholder="e.g. What are the deliverables for this week?"
-            value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={handleKeyDown} maxLength={1000} disabled={queryLoading}
+            value={query} onChange={(e) => { setQuery(e.target.value); e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'; }} onKeyDown={handleKeyDown} maxLength={1000} disabled={queryLoading}
             onFocus={(e) => { e.currentTarget.style.borderColor = theme.accent; }}
             onBlur={(e) => { e.currentTarget.style.borderColor = theme.borderLight; }}
           />
@@ -665,8 +679,14 @@ function App() {
                 {queryLoading ? <><Spinner /> Thinking...</> : 'Ask'}
               </button>
               {speechSupported && (
-                <button onClick={handleVoiceInput} style={{ padding: '10px 12px', background: isListening ? '#d93025' : (darkMode ? '#2d3748' : '#f1f3f4'), color: isListening ? '#fff' : theme.text, border: `1px solid ${isListening ? '#d93025' : theme.border}`, borderRadius: '8px', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'all 0.2s' }} title={isListening ? 'Stop listening' : 'Voice input'}>
-                  {isListening ? '⏹️' : '🎤'}
+                <button onClick={handleVoiceInput} style={{ padding: '6px', background: isListening ? '#d93025' : 'transparent', color: isListening ? '#fff' : theme.textMuted, border: `1.5px solid ${isListening ? '#d93025' : theme.border}`, borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', width: '36px', height: '36px', animation: isListening ? 'pulse 1.2s ease-in-out infinite' : 'none' }} title={isListening ? 'Stop listening' : 'Voice input'}>
+                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                    <rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor" />
+                    <path d="M6 11a6 6 0 0 0 12 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" fill="none" />
+                    <line x1="12" y1="17" x2="12" y2="21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                    <line x1="8.5" y1="21" x2="15.5" y2="21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                    {isListening && <line x1="3.5" y1="3.5" x2="20.5" y2="20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />}
+                  </svg>
                 </button>
               )}
             </div>
@@ -704,9 +724,10 @@ function App() {
                   ))}
                 </div>
               )}
-              {/* Copy + Delete buttons */}
+              {/* Copy + Speaker + Delete buttons */}
               <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: `1px solid ${theme.border}`, display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                 <CopyButton text={a.answer} theme={theme} />
+                <button onClick={() => { if ('speechSynthesis' in window) { window.speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(a.answer.replace(/\*\*/g, '')); window.speechSynthesis.speak(u); }}} style={{ background: 'none', border: `1px solid ${theme.border}`, borderRadius: '6px', padding: '4px 8px', fontSize: '11px', color: theme.textMuted, cursor: 'pointer' }} title="Read aloud">🔊</button>
               </div>
             </div>
           ))}
