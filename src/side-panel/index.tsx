@@ -79,6 +79,33 @@ const darkTheme: Theme = {
   indexedText: '#86efac',
 };
 
+// --- Speak Button (toggle: start/stop) ---
+function SpeakButton({ text, theme }: { text: string; theme: Theme }) {
+  const [speaking, setSpeaking] = useState(false);
+
+  const handleClick = () => {
+    if (!('speechSynthesis' in window)) return;
+    if (speaking) {
+      window.speechSynthesis.cancel();
+      setSpeaking(false);
+    } else {
+      window.speechSynthesis.cancel();
+      const plain = text.replace(/\*\*(.*?)\*\*/g, '$1').replace(/^\* /gm, '').replace(/^\- /gm, '');
+      const utterance = new SpeechSynthesisUtterance(plain);
+      utterance.onend = () => setSpeaking(false);
+      utterance.onerror = () => setSpeaking(false);
+      window.speechSynthesis.speak(utterance);
+      setSpeaking(true);
+    }
+  };
+
+  return (
+    <button onClick={handleClick} style={{ background: speaking ? '#d93025' : 'none', color: speaking ? '#fff' : theme.textMuted, border: `1px solid ${speaking ? '#d93025' : theme.border}`, borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', transition: 'all 0.2s' }} title={speaking ? 'Stop reading' : 'Read aloud'}>
+      {speaking ? '⏹ Stop' : '🔊 Listen'}
+    </button>
+  );
+}
+
 function CopyButton({ text, theme }: { text: string; theme: Theme }) {
   const [copied, setCopied] = useState(false);
 
@@ -724,10 +751,10 @@ function App() {
                   ))}
                 </div>
               )}
-              {/* Copy + Speaker + Delete buttons */}
+              {/* Copy + Speaker buttons */}
               <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: `1px solid ${theme.border}`, display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                 <CopyButton text={a.answer} theme={theme} />
-                <button onClick={() => { if ('speechSynthesis' in window) { window.speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(a.answer.replace(/\*\*/g, '')); window.speechSynthesis.speak(u); }}} style={{ background: 'none', border: `1px solid ${theme.border}`, borderRadius: '6px', padding: '4px 8px', fontSize: '11px', color: theme.textMuted, cursor: 'pointer' }} title="Read aloud">🔊</button>
+                <SpeakButton text={a.answer} theme={theme} />
               </div>
             </div>
           ))}
