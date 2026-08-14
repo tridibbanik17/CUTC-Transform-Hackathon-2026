@@ -505,18 +505,23 @@ function App() {
 
           {/* Files indexed counter */}
           {hasContent && (
-            <div style={{ marginTop: '8px', padding: '8px 12px', background: theme.indexedBg, borderRadius: '8px', fontSize: '12px', color: theme.indexedText }}>
-              {uploadedFiles.length > 0 ? `${uploadedFiles.length} file${uploadedFiles.length !== 1 ? 's' : ''}` : 'Content ready'} | {(totalChars / 1000).toFixed(1)}k chars indexed
+            <div style={{ marginTop: '8px', padding: '10px 14px', background: theme.indexedBg, borderRadius: '10px', fontSize: '12px', color: theme.indexedText }}>
+              <div style={{ fontWeight: 600 }}>
+                📚 {uploadedFiles.length > 0 ? `${uploadedFiles.length} file${uploadedFiles.length !== 1 ? 's' : ''}` : 'Content ready'} | {(totalChars / 1000).toFixed(1)}k / 80k chars
+              </div>
+              {totalChars >= 80000 && (
+                <div style={{ marginTop: '4px', fontSize: '11px', color: '#b45309' }}>⚠️ Max context reached (80k chars). New files won't add more content. Clear files to start fresh.</div>
+              )}
             </div>
           )}
 
           {/* Uploaded file names */}
           {uploadedFiles.length > 0 && (
-            <div style={{ marginTop: '6px', fontSize: '11px', color: theme.textMuted }}>
+            <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
               {uploadedFiles.map((f, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '2px' }}>
-                  <span>📎 {f}</span>
-                  <button onClick={() => handleDeleteFile(f)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '11px', color: '#d93025', padding: '0 4px' }}>✕</button>
+                <div key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 10px', background: darkMode ? '#2d3748' : '#f0f4f8', border: `1px solid ${darkMode ? '#4a5568' : '#e2e8f0'}`, borderRadius: '20px', fontSize: '11px', color: theme.text, maxWidth: '100%' }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📄 {f}</span>
+                  <button onClick={() => handleDeleteFile(f)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: darkMode ? '#fc8181' : '#e53e3e', padding: '0', lineHeight: 1, flexShrink: 0 }} title="Remove file">×</button>
                 </div>
               ))}
             </div>
