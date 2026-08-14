@@ -251,7 +251,7 @@ function App() {
   const [query, setQuery] = useState('');
   const [queryLoading, setQueryLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [speechSupported] = useState(() => 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
+  const [speechSupported] = useState(false); // Disabled: Chrome extension side panels can't access microphone
   const [answers, setAnswers] = useState<Array<{ query: string; answer: string; status: string; citations: any[] }>>([]);
   const [platform, setPlatform] = useState<string | null>(null);
   const [courseInfo, setCourseInfo] = useState<{ courseName: string; courseId: string } | null>(null);
@@ -455,6 +455,10 @@ function App() {
     recognition.onerror = (e: any) => {
       console.error('Speech recognition error:', e.error);
       setIsListening(false);
+      if (e.error === 'not-allowed') {
+        // Mic not available in extension side panel — hide the button
+        (window as any).__speechNotSupported = true;
+      }
       (window as any).__coursechat_recognition = null;
     };
     
