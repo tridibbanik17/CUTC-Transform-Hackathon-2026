@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PrivacyNotice, PRIVACY_NOTICE_SESSION_KEY } from './components/PrivacyNotice';
 import { useSessionHistory } from './hooks/useSessionHistory';
@@ -152,6 +152,49 @@ function GearIcon() {
   );
 }
 
+// --- Speaker / stop icons (used by the per-answer read-aloud button) ---
+function SpeakerIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false">
+      <path d="M4 9v6h4l5 5V4L8 9H4Z" fill="currentColor" />
+      <path d="M16.5 8.5a5 5 0 0 1 0 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" fill="none" />
+      <path d="M18.7 6.3a8 8 0 0 1 0 11.4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" fill="none" />
+    </svg>
+  );
+}
+
+function StopIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" focusable="false">
+      <rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor" />
+    </svg>
+  );
+}
+
+// --- Mic icons (used by the voice-input button on the question box) ---
+function MicIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false">
+      <rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor" />
+      <path d="M6 11a6 6 0 0 0 12 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" fill="none" />
+      <line x1="12" y1="17" x2="12" y2="21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <line x1="8.5" y1="21" x2="15.5" y2="21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function MicOffIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false">
+      <rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor" />
+      <path d="M6 11a6 6 0 0 0 12 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" fill="none" />
+      <line x1="12" y1="17" x2="12" y2="21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <line x1="8.5" y1="21" x2="15.5" y2="21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <line x1="3.5" y1="3.5" x2="20.5" y2="20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 // --- PDF Parser using sandboxed iframe ---
 function parsePdfInIframe(buffer: ArrayBuffer): Promise<string> {
   return new Promise((resolve) => {
@@ -207,6 +250,175 @@ function FormattedAnswer({ text }: { text: string }) {
   return <>{elements}</>;
 }
 
+// --- Text-to-Speech ---
+function speakText(text: string, onStart?: () => void, onEnd?: () => void) {
+  if (!('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  if (onStart) utterance.onstart = onStart;
+  if (onEnd) { utterance.onend = onEnd; utterance.onerror = onEnd; }
+  window.speechSynthesis.speak(utterance);
+}
+
+function stopSpeaking() {
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+}
+
+// Icon-only read-aloud button (no "Listen" text) — placed at the top of an answer card
+function SpeakerButton({ text, theme }: { text: string; theme: Theme }) {
+  const [speaking, setSpeaking] = useState(false);
+
+  function handleClick() {
+    if (speaking) { stopSpeaking(); setSpeaking(false); return; }
+    speakText(text, () => setSpeaking(true), () => setSpeaking(false));
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      title={speaking ? 'Stop reading' : 'Read aloud'}
+      aria-label={speaking ? 'Stop reading' : 'Read aloud'}
+      style={{
+        width: '26px',
+        height: '26px',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: speaking ? theme.successBg : theme.hoverBg,
+        color: speaking ? theme.success : theme.textSecondary,
+        border: `1px solid ${theme.border}`,
+        borderRadius: '7px',
+        cursor: 'pointer',
+        padding: 0,
+        flexShrink: 0,
+      }}
+    >
+      {speaking ? <StopIcon /> : <SpeakerIcon />}
+    </button>
+  );
+}
+
+// --- Speech-to-Text (voice input for the question box) ---
+function useSpeechToText(onResult: (finalText: string) => void) {
+  const recognitionRef = useRef<any>(null);
+  const [listening, setListening] = useState(false);
+  const [supported, setSupported] = useState(true);
+  const [interimText, setInterimText] = useState('');
+
+  useEffect(() => {
+    const SpeechRecognitionCtor =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognitionCtor) {
+      setSupported(false);
+      return;
+    }
+
+    const recognition = new SpeechRecognitionCtor();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event: any) => {
+      let finalText = '';
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) finalText += transcript;
+        else interim += transcript;
+      }
+      if (interim) setInterimText(interim);
+      if (finalText) {
+        setInterimText('');
+        onResult(finalText.trim());
+      }
+    };
+
+    recognition.onerror = () => {
+      setListening(false);
+      setInterimText('');
+    };
+
+    recognition.onend = () => {
+      setListening(false);
+      setInterimText('');
+    };
+
+    recognitionRef.current = recognition;
+
+    return () => {
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
+      try { recognition.stop(); } catch { /* no-op */ }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const start = useCallback(() => {
+    if (!recognitionRef.current || listening) return;
+    try {
+      recognitionRef.current.start();
+      setListening(true);
+    } catch {
+      /* already started */
+    }
+  }, [listening]);
+
+  const stop = useCallback(() => {
+    if (!recognitionRef.current) return;
+    try { recognitionRef.current.stop(); } catch { /* no-op */ }
+    setListening(false);
+  }, []);
+
+  const toggle = useCallback(() => {
+    if (listening) stop(); else start();
+  }, [listening, start, stop]);
+
+  return { listening, supported, interimText, toggle };
+}
+
+function MicButton({
+  listening,
+  supported,
+  onToggle,
+  theme,
+}: {
+  listening: boolean;
+  supported: boolean;
+  onToggle: () => void;
+  theme: Theme;
+}) {
+  if (!supported) return null;
+
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      title={listening ? 'Stop voice input' : 'Ask by voice'}
+      aria-label={listening ? 'Stop voice input' : 'Ask by voice'}
+      style={{
+        width: '34px',
+        height: '34px',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: listening ? theme.errorBg : theme.hoverBg,
+        color: listening ? theme.error : theme.textSecondary,
+        border: `1px solid ${theme.border}`,
+        borderRadius: '8px',
+        cursor: 'pointer',
+        padding: 0,
+        flexShrink: 0,
+        animation: listening ? 'pulse 1.2s ease-in-out infinite' : 'none',
+      }}
+    >
+      {listening ? <MicOffIcon /> : <MicIcon />}
+    </button>
+  );
+}
+
 // --- Loading Spinner ---
 function Spinner() {
   return (
@@ -227,7 +439,6 @@ function App() {
   const [platform, setPlatform] = useState<string | null>(null);
   const [courseInfo, setCourseInfo] = useState<{ courseName: string; courseId: string } | null>(null);
 
-  // Persisted chat history (IndexedDB-backed, survives tab close) — replaces the old local useState<answers>
   const { history: answers, recordResponse, clearHistory } = useSessionHistory(courseInfo?.courseId ?? 'default-course');
 
   const [showSettings, setShowSettings] = useState(false);
@@ -240,6 +451,17 @@ function App() {
 
   const theme = darkMode ? darkTheme : lightTheme;
 
+  // Voice input: append recognized speech to whatever's already typed
+  const { listening, supported: micSupported, interimText, toggle: toggleListening } = useSpeechToText(
+    useCallback((finalText: string) => {
+      setQuery((prev) => (prev.trim().length > 0 ? `${prev.trim()} ${finalText}` : finalText));
+    }, [])
+  );
+
+  useEffect(() => {
+    return () => stopSpeaking();
+  }, []);
+
   useEffect(() => {
     chrome.storage.session.get([PRIVACY_NOTICE_SESSION_KEY], (result) => {
       setPrivacyAcknowledged(Boolean(result[PRIVACY_NOTICE_SESSION_KEY]));
@@ -250,7 +472,6 @@ function App() {
     });
   }, []);
 
-  // Load persisted state on mount
   useEffect(() => {
     sendMessage({ type: 'GET_API_KEY_STATUS' }).then((res) => {
       if (res?.payload) { setHasKey(res.payload.hasKey); setMaskedKey(res.payload.maskedKey); }
@@ -261,7 +482,6 @@ function App() {
     sendMessage({ type: 'GET_COURSE_INFO' }).then((res) => {
       if (res?.payload) setCourseInfo(res.payload);
     });
-    // Check existing context
     chrome.storage.local.get(['course_context_default-course', 'course_files_default-course'], (r) => {
       const ctx = r['course_context_default-course'] || '';
       if (ctx.length > 0) setTotalChars(ctx.length);
@@ -308,7 +528,6 @@ function App() {
     const newFileNames: string[] = [];
 
     for (const file of Array.from(files)) {
-      // Reject duplicates
       if (uploadedFiles.includes(file.name)) { skipped++; continue; }
       try {
         if (file.name.endsWith('.pdf')) {
@@ -342,13 +561,8 @@ function App() {
     setIndexing(false); e.target.value = '';
   }
 
-  // Delete individual file
   async function handleDeleteFile(fileName: string) {
     const newFiles = uploadedFiles.filter(f => f !== fileName);
-    // Re-read context — we can't selectively remove text, so we just update the file list
-    // The context still contains the text but it won't cause harm
-    // For a clean approach, we'd need to re-extract all remaining files
-    // For now, just update the file list display
     await chrome.storage.local.set({ 'course_files_default-course': newFiles });
     setUploadedFiles(newFiles);
     if (newFiles.length === 0) {
@@ -366,6 +580,7 @@ function App() {
 
   async function handleQuery() {
     if (!query.trim() || query.trim().length < 3) return;
+    if (listening) toggleListening();
     setQueryLoading(true);
     const trimmedQuery = query.trim();
     const res = await sendMessage({ type: 'PROCESS_QUERY', payload: { courseId: courseInfo?.courseId ?? 'default-course', query: trimmedQuery } });
@@ -385,7 +600,6 @@ function App() {
   function handleExportChat() {
     if (answers.length === 0) return;
     const lines: string[] = ['# CourseChat - Conversation Export', '', `Exported: ${new Date().toLocaleString()}`, ''];
-    // Reverse to show oldest first
     [...answers].reverse().forEach((a, i) => {
       lines.push(`## Q${i + 1}: ${a.query}`);
       lines.push('');
@@ -434,13 +648,16 @@ function App() {
 
   return (
     <div style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', padding: '16px', fontSize: '14px', color: theme.text, background: theme.bg, minHeight: '100vh', transition: 'background 0.3s, color 0.3s' }}>
-      {/* Animations */}
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulse {
+          0% { box-shadow: 0 0 0 0 rgba(217, 48, 37, 0.35); }
+          70% { box-shadow: 0 0 0 6px rgba(217, 48, 37, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(217, 48, 37, 0); }
+        }
         body { margin: 0; background: ${theme.bg}; }
       `}</style>
 
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', paddingBottom: '12px', borderBottom: `2px solid ${theme.accent}` }}>
         <div style={{ width: '28px', height: '28px', background: `linear-gradient(135deg, ${theme.accent}, ${theme.accentDark})`, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '14px' }}>C</div>
         <span style={{ fontSize: '20px', fontWeight: 700, color: theme.accent }}>CourseChat</span>
@@ -451,19 +668,11 @@ function App() {
             title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
             aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
             style={{
-              width: '36px',
-              height: '36px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              width: '36px', height: '36px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
               background: darkMode ? 'linear-gradient(135deg, #1f2937, #111827)' : 'linear-gradient(135deg, #ffffff, #eef2ff)',
-              color: darkMode ? '#fbbf24' : theme.accent,
-              border: `1px solid ${darkMode ? '#334155' : theme.border}`,
-              borderRadius: '10px',
-              cursor: 'pointer',
-              boxShadow: `0 2px 6px ${theme.shadow}`,
-              transition: 'transform 0.15s ease, box-shadow 0.15s ease, background 0.2s ease',
-              padding: 0,
+              color: darkMode ? '#fbbf24' : theme.accent, border: `1px solid ${darkMode ? '#334155' : theme.border}`,
+              borderRadius: '10px', cursor: 'pointer', boxShadow: `0 2px 6px ${theme.shadow}`,
+              transition: 'transform 0.15s ease, box-shadow 0.15s ease, background 0.2s ease', padding: 0,
             }}
           >
             {darkMode ? <SunIcon /> : <MoonIcon />}
@@ -474,19 +683,11 @@ function App() {
             title={showSettings ? 'Hide settings' : 'Open settings'}
             aria-label={showSettings ? 'Hide settings' : 'Open settings'}
             style={{
-              width: '36px',
-              height: '36px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              width: '36px', height: '36px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
               background: showSettings ? (darkMode ? '#1e293b' : '#dbeafe') : theme.settingsBg,
-              color: showSettings ? theme.accent : theme.textSecondary,
-              border: `1px solid ${theme.border}`,
-              borderRadius: '10px',
-              cursor: 'pointer',
-              boxShadow: `0 2px 6px ${theme.shadow}`,
-              transition: 'transform 0.15s ease, box-shadow 0.15s ease, background 0.2s ease',
-              padding: 0,
+              color: showSettings ? theme.accent : theme.textSecondary, border: `1px solid ${theme.border}`,
+              borderRadius: '10px', cursor: 'pointer', boxShadow: `0 2px 6px ${theme.shadow}`,
+              transition: 'transform 0.15s ease, box-shadow 0.15s ease, background 0.2s ease', padding: 0,
             }}
           >
             <GearIcon />
@@ -494,7 +695,6 @@ function App() {
         </div>
       </div>
 
-      {/* Platform Status — only show if no content uploaded */}
       {!hasContent && (
         <div style={{ fontSize: '12px', color: theme.textMuted, marginBottom: '12px' }}>
           {platform ? (
@@ -505,7 +705,6 @@ function App() {
         </div>
       )}
 
-      {/* Settings Panel — hidden by default */}
       {showSettings && (
         <div style={{ marginBottom: '16px', background: theme.settingsBg, padding: '14px', borderRadius: '10px', border: `1px solid ${theme.border}` }}>
           <label style={{ fontSize: '12px', fontWeight: 600, color: theme.textSecondary, display: 'block', marginBottom: '6px' }}>Gemini API Key</label>
@@ -533,7 +732,6 @@ function App() {
         </div>
       )}
 
-      {/* Onboarding */}
       {!hasKey && !showSettings && (
         <div style={{ marginBottom: '16px', background: theme.warningBg, padding: '14px', borderRadius: '10px', border: `1px solid ${darkMode ? '#5a5020' : '#fdd835'}` }}>
           <strong style={{ fontSize: '14px' }}>Welcome to CourseChat!</strong>
@@ -541,12 +739,10 @@ function App() {
         </div>
       )}
 
-      {/* Privacy Notice */}
       {!privacyAcknowledged && (
         <PrivacyNotice onAcknowledge={handleAcknowledgePrivacyNotice} />
       )}
 
-      {/* Upload Section */}
       {hasKey && (
         <div style={{ marginBottom: '16px' }}>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -559,14 +755,12 @@ function App() {
             )}
           </div>
 
-          {/* Files indexed counter */}
           {hasContent && (
             <div style={{ marginTop: '8px', padding: '8px 12px', background: theme.indexedBg, borderRadius: '8px', fontSize: '12px', color: theme.indexedText }}>
               {uploadedFiles.length > 0 ? `${uploadedFiles.length} file${uploadedFiles.length !== 1 ? 's' : ''}` : 'Content ready'} | {(totalChars / 1000).toFixed(1)}k chars indexed
             </div>
           )}
 
-          {/* Uploaded file names */}
           {uploadedFiles.length > 0 && (
             <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
               {uploadedFiles.map((f, i) => (
@@ -586,17 +780,23 @@ function App() {
         </div>
       )}
 
-      {/* Query Input */}
       {hasKey && (
         <div style={{ marginBottom: '16px' }}>
           <label style={{ fontSize: '12px', fontWeight: 600, color: theme.textSecondary, display: 'block', marginBottom: '6px' }}>Ask a question about your course.</label>
-          <textarea
-            style={{ width: '100%', padding: '10px 12px', border: `2px solid ${theme.borderLight}`, borderRadius: '10px', fontSize: '14px', minHeight: '64px', resize: 'vertical' as const, boxSizing: 'border-box' as const, transition: 'border-color 0.2s', outline: 'none', background: theme.inputBg, color: theme.text }}
-            placeholder="e.g. What are the deliverables for this week?"
-            value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={handleKeyDown} maxLength={1000} disabled={queryLoading}
-            onFocus={(e) => { e.currentTarget.style.borderColor = theme.accent; }}
-            onBlur={(e) => { e.currentTarget.style.borderColor = theme.borderLight; }}
-          />
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+            <textarea
+              style={{ flex: 1, padding: '10px 12px', border: `2px solid ${listening ? theme.error : theme.borderLight}`, borderRadius: '10px', fontSize: '14px', minHeight: '64px', resize: 'vertical' as const, boxSizing: 'border-box' as const, transition: 'border-color 0.2s', outline: 'none', background: theme.inputBg, color: theme.text }}
+              placeholder={listening ? 'Listening…' : 'e.g. What are the deliverables for this week?'}
+              value={listening && interimText ? `${query}${query ? ' ' : ''}${interimText}` : query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={handleKeyDown}
+              maxLength={1000}
+              disabled={queryLoading}
+              onFocus={(e) => { e.currentTarget.style.borderColor = listening ? theme.error : theme.accent; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = listening ? theme.error : theme.borderLight; }}
+            />
+            <MicButton listening={listening} supported={micSupported} onToggle={toggleListening} theme={theme} />
+          </div>
           <div style={{ display: 'flex', marginTop: '8px', justifyContent: 'space-between', alignItems: 'center' }}>
             <button onClick={handleQuery} disabled={queryLoading || query.trim().length < 3} style={{ padding: '10px 20px', background: queryLoading || query.trim().length < 3 ? '#a0c4f0' : '#1a73e8', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', cursor: queryLoading ? 'wait' : 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
               {queryLoading ? <><Spinner /> Thinking...</> : 'Ask'}
@@ -612,12 +812,15 @@ function App() {
         </div>
       )}
 
-      {/* Answer History */}
       {answers.length > 0 && (
         <div>
           {answers.map((a, i) => (
             <div key={i} style={{ marginBottom: '16px', padding: '14px', background: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: '12px', boxShadow: `0 1px 3px ${theme.shadow}` }}>
-              <div style={{ fontSize: '13px', fontWeight: 600, color: theme.text, marginBottom: '8px' }}>Q: {a.query}</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', marginBottom: '8px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: theme.text }}>Q: {a.query}</div>
+                <SpeakerButton text={a.answer} theme={theme} />
+              </div>
+
               <div style={{ fontSize: '13px', lineHeight: 1.6, color: darkMode ? '#ccc' : '#333' }}>
                 {a.status === 'success' && <FormattedAnswer text={a.answer} />}
                 {a.status === 'low_confidence' && (
@@ -639,7 +842,6 @@ function App() {
                   ))}
                 </div>
               )}
-              {/* Copy button */}
               <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: `1px solid ${theme.border}`, display: 'flex', justifyContent: 'flex-end' }}>
                 <CopyButton text={a.answer} theme={theme} />
               </div>
