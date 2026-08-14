@@ -325,15 +325,23 @@ function App() {
     }
 
     if (allText.length > 0) {
-      const capped = allText.slice(0, 80000);
+      // Append new text to existing context
+      const existing = await new Promise<string>((resolve) => {
+        chrome.storage.local.get('course_context_default-course', (r) => resolve(r['course_context_default-course'] || ''));
+      });
+      const combined = (existing + allText).slice(0, 80000);
       const allFileNames = [...uploadedFiles, ...newFileNames];
       await chrome.storage.local.set({
-        'course_context_default-course': capped,
+        'course_context_default-course': combined,
         'course_files_default-course': allFileNames,
       });
-      setTotalChars(capped.length);
+      setTotalChars(combined.length);
       setUploadedFiles(allFileNames);
-      setIndexResult(`✓ Uploaded ${filesProcessed} file(s). Ready to answer questions!`);
+      let msg = `✓ Uploaded ${filesProcessed} file(s). Ready to answer questions!`;
+      if (combined.length >= 80000 && (existing + allText).length > 80000) {
+        msg += ' (some content truncated — 80k limit)';
+      }
+      setIndexResult(msg);
     } else if (!indexResult) { setIndexResult('✗ Could not extract text from uploaded files.'); }
     setIndexing(false); e.target.value = '';
   }
