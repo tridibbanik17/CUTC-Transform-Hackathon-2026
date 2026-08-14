@@ -280,6 +280,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       sendResponse({ payload: { platformName: activePlatformName } });
       break;
 
+    case 'STOP_SPEECH':
+      if ((window as any).__ccRecognition) {
+        try { (window as any).__ccRecognition.stop(); } catch {}
+        (window as any).__ccRecognition = null;
+      }
+      sendResponse({ payload: null });
+      break;
+
     case 'GET_DOCUMENT_LINKS':
       sendResponse({ payload: { links: [] } });
       break;

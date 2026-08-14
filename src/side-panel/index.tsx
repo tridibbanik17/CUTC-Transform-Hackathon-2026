@@ -251,7 +251,7 @@ function App() {
   const [query, setQuery] = useState('');
   const [queryLoading, setQueryLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [speechSupported] = useState(false); // Disabled: Chrome extension side panels can't access microphone
+  const [speechSupported] = useState(true); // Uses content script injection for mic access
   const [answers, setAnswers] = useState<Array<{ query: string; answer: string; status: string; citations: any[] }>>([]);
   const [platform, setPlatform] = useState<string | null>(null);
   const [courseInfo, setCourseInfo] = useState<{ courseName: string; courseId: string } | null>(null);
@@ -413,61 +413,78 @@ function App() {
     setIndexResult('Cleared. Upload new files to start fresh.');
   }
 
-  // Voice dictation
+  // Voice dictation — runs speech recognition on the active web page (has mic access)
   function handleVoiceInput() {
-    const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
-    if (!SpeechRecognition) return;
-
     if (isListening) {
+      // Stop: send stop message to the tab
       setIsListening(false);
-      // Stop any active recognition
-      if ((window as any).__coursechat_recognition) {
-        (window as any).__coursechat_recognition.stop();
-        (window as any).__coursechat_recognition = null;
-      }
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]?.id) {
+          chrome.tabs.sendMessage(tabs[0].id, { type: 'STOP_SPEECH' });
+        }
+      });
       return;
     }
 
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
-    (window as any).__coursechat_recognition = recognition;
+    setIsListening(true);
 
-    let finalTranscript = query; // Start with existing text
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (!tabs[0]?.id) { setIsListening(false); return; }
+      
+      chrome.scripting.executeScript({
+        target: { tabId: tabs[0].id },
+        func: () => {
+          // This runs in the web page context — HAS microphone access
+          const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+          if (!SpeechRecognition) {
+            chrome.runtime.sendMessage({ type: 'SPEECH_ERROR', error: 'not-supported' });
+            return;
+          }
 
-    recognition.onstart = () => setIsListening(true);
-    
-    recognition.onresult = (event: any) => {
-      let interim = '';
-      let newFinal = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        if (event.results[i].isFinal) {
-          newFinal += event.results[i][0].transcript;
-        } else {
-          interim += event.results[i][0].transcript;
-        }
+          // Stop any previous instance
+          if ((window as any).__ccRecognition) {
+            try { (window as any).__ccRecognition.stop(); } catch {}
+          }
+
+          const recognition = new SpeechRecognition();
+          recognition.continuous = true;
+          recognition.interimResults = true;
+          recognition.lang = 'en-US';
+          (window as any).__ccRecognition = recognition;
+
+          recognition.onresult = (event: any) => {
+            let final = '';
+            let interim = '';
+            for (let i = 0; i < event.results.length; i++) {
+              if (event.results[i].isFinal) final += event.results[i][0].transcript + ' ';
+              else interim += event.results[i][0].transcript;
+            }
+            chrome.runtime.sendMessage({ type: 'SPEECH_RESULT', text: (final + interim).trim() });
+          };
+
+          recognition.onerror = (e: any) => {
+            chrome.runtime.sendMessage({ type: 'SPEECH_ERROR', error: e.error });
+          };
+
+          recognition.onend = () => {
+            chrome.runtime.sendMessage({ type: 'SPEECH_END' });
+          };
+
+          recognition.start();
+        },
+      }).catch(() => setIsListening(false));
+    });
+
+    // Listen for results from the content script
+    const listener = (message: any) => {
+      if (message.type === 'SPEECH_RESULT') {
+        setQuery(message.text);
+      } else if (message.type === 'SPEECH_END' || message.type === 'SPEECH_ERROR') {
+        setIsListening(false);
+        chrome.runtime.onMessage.removeListener(listener);
       }
-      if (newFinal) finalTranscript += (finalTranscript ? ' ' : '') + newFinal;
-      setQuery(finalTranscript + (interim ? ' ' + interim : ''));
     };
-
-    recognition.onerror = (e: any) => {
-      console.error('Speech recognition error:', e.error);
-      setIsListening(false);
-      if (e.error === 'not-allowed') {
-        // Mic not available in extension side panel — hide the button
-        (window as any).__speechNotSupported = true;
-      }
-      (window as any).__coursechat_recognition = null;
-    };
-    
-    recognition.onend = () => {
-      setIsListening(false);
-      (window as any).__coursechat_recognition = null;
-    };
-
-    recognition.start();
+    chrome.runtime.onMessage.addListener(listener);
   }
 
   async function handleQuery() {
