@@ -111,6 +111,46 @@ function CopyButton({ text, theme }: { text: string; theme: Theme }) {
   );
 }
 
+function SunIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
+      <circle cx="12" cy="12" r="4.5" fill="currentColor" />
+      <g stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+        <line x1="12" y1="2.5" x2="12" y2="5.5" />
+        <line x1="12" y1="18.5" x2="12" y2="21.5" />
+        <line x1="2.5" y1="12" x2="5.5" y2="12" />
+        <line x1="18.5" y1="12" x2="21.5" y2="12" />
+        <line x1="4.8" y1="4.8" x2="6.9" y2="6.9" />
+        <line x1="17.1" y1="17.1" x2="19.2" y2="19.2" />
+        <line x1="4.8" y1="19.2" x2="6.9" y2="17.1" />
+        <line x1="17.1" y1="6.9" x2="19.2" y2="4.8" />
+      </g>
+    </svg>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
+      <path
+        d="M16.8 14.9A7.3 7.3 0 0 1 9.1 7.2c0-1.1.2-2.1.6-3.1A8.6 8.6 0 1 0 19.9 17c-1-.4-2-.6-3.1-.6Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function GearIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
+      <path
+        d="M19.4 13.5c.1-.5.1-1 0-1.5l1.7-1.3-1.7-3-2 .7c-.4-.4-.8-.7-1.3-1l-.3-2.1h-3.4l-.3 2.1c-.5.2-.9.6-1.3 1l-2-.7-1.7 3 1.7 1.3c-.1.5-.1 1 0 1.5L5.8 14.8l1.7 3 2-.7c.4.4.8.7 1.3 1l.3 2.1h3.4l.3-2.1c.5-.2.9-.6 1.3-1l2 .7 1.7-3-1.7-1.3ZM12 15.3A3.3 3.3 0 1 1 12 8.7a3.3 3.3 0 0 1 0 6.6Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
 // --- PDF Parser using sandboxed iframe ---
 function parsePdfInIframe(buffer: ArrayBuffer): Promise<string> {
   return new Promise((resolve) => {
@@ -401,10 +441,52 @@ function App() {
         <div style={{ width: '28px', height: '28px', background: `linear-gradient(135deg, ${theme.accent}, ${theme.accentDark})`, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '14px' }}>C</div>
         <span style={{ fontSize: '20px', fontWeight: 700, color: theme.accent }}>CourseChat</span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '6px' }}>
-          <button onClick={toggleDarkMode} title={darkMode ? 'Light mode' : 'Dark mode'} style={{ background: theme.settingsBg, border: `1px solid ${theme.border}`, borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>
-            {darkMode ? '☀️' : '🌙'}
+          <button
+            type="button"
+            onClick={toggleDarkMode}
+            title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+            aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+            style={{
+              width: '36px',
+              height: '36px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: darkMode ? 'linear-gradient(135deg, #1f2937, #111827)' : 'linear-gradient(135deg, #ffffff, #eef2ff)',
+              color: darkMode ? '#fbbf24' : theme.accent,
+              border: `1px solid ${darkMode ? '#334155' : theme.border}`,
+              borderRadius: '10px',
+              cursor: 'pointer',
+              boxShadow: `0 2px 6px ${theme.shadow}`,
+              transition: 'transform 0.15s ease, box-shadow 0.15s ease, background 0.2s ease',
+              padding: 0,
+            }}
+          >
+            {darkMode ? <SunIcon /> : <MoonIcon />}
           </button>
-          <button onClick={() => setShowSettings(!showSettings)} style={{ background: showSettings ? (darkMode ? '#2a3a5a' : '#e8f0fe') : theme.settingsBg, border: `1px solid ${theme.border}`, borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>⚙️</button>
+          <button
+            type="button"
+            onClick={() => setShowSettings(!showSettings)}
+            title={showSettings ? 'Hide settings' : 'Open settings'}
+            aria-label={showSettings ? 'Hide settings' : 'Open settings'}
+            style={{
+              width: '36px',
+              height: '36px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: showSettings ? (darkMode ? '#1e293b' : '#dbeafe') : theme.settingsBg,
+              color: showSettings ? theme.accent : theme.textSecondary,
+              border: `1px solid ${theme.border}`,
+              borderRadius: '10px',
+              cursor: 'pointer',
+              boxShadow: `0 2px 6px ${theme.shadow}`,
+              transition: 'transform 0.15s ease, box-shadow 0.15s ease, background 0.2s ease',
+              padding: 0,
+            }}
+          >
+            <GearIcon />
+          </button>
         </div>
       </div>
 
@@ -465,11 +547,11 @@ function App() {
         <div style={{ marginBottom: '16px' }}>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <label style={{ padding: '9px 16px', background: theme.accent, color: '#fff', borderRadius: '8px', fontSize: '13px', cursor: 'pointer', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-              {indexing ? <><Spinner /> Processing...</> : 'Upload PDF/File'}
+              {indexing ? <><Spinner /> Processing...</> : 'Upload PDF/file'}
               <input type="file" accept=".pdf,.pptx,.docx,.txt,.md,.py,.java,.js,.cpp,.c,.css,.csv,.ipynb,.html,.doc,.odt,.m" multiple style={{ display: 'none' }} onChange={handleFileUpload} disabled={indexing} />
             </label>
             {hasContent && (
-              <button onClick={handleClearContext} style={{ padding: '9px 12px', background: theme.hoverBg, color: theme.textSecondary, border: `1px solid ${theme.border}`, borderRadius: '8px', fontSize: '12px', cursor: 'pointer' }}>Clear Files</button>
+              <button onClick={handleClearContext} style={{ padding: '9px 12px', background: theme.hoverBg, color: theme.textSecondary, border: `1px solid ${theme.border}`, borderRadius: '8px', fontSize: '12px', cursor: 'pointer' }}>Clear files</button>
             )}
           </div>
 
