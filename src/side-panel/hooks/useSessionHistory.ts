@@ -18,14 +18,14 @@ function createFallbackId() {
 }
 
 async function getOrCreateSessionId(): Promise<string> {
-  const existing = await chrome.storage.session.get(SESSION_STORAGE_KEY);
+  const existing = await chrome.storage.local.get(SESSION_STORAGE_KEY);
   const current = existing[SESSION_STORAGE_KEY];
   if (typeof current === 'string' && current.length > 0) {
     return current;
   }
 
   const sessionId = typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : createFallbackId();
-  await chrome.storage.session.set({ [SESSION_STORAGE_KEY]: sessionId });
+  await chrome.storage.local.set({ [SESSION_STORAGE_KEY]: sessionId });
   return sessionId;
 }
 

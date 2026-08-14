@@ -82,6 +82,19 @@ export async function getHistoryByCourseSession(
   });
 }
 
+/**
+ * Delete a single history entry by its id.
+ */
+export async function deleteHistoryEntry(id: string): Promise<void> {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('history', 'readwrite');
+    tx.objectStore('history').delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 export async function clearHistory(): Promise<void> {
   const db = await openDatabase();
   return new Promise((resolve, reject) => {
