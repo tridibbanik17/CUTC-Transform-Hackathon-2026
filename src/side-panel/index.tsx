@@ -443,6 +443,7 @@ function App() {
           await chrome.tabs.sendMessage(tabId, { type: 'START_SPEECH' });
         } catch {
           setIsListening(false);
+          setIndexResult('🎤 Voice input requires a regular web page (not chrome:// pages). Open any website tab and try again.');
         }
       }
     });
@@ -450,10 +451,25 @@ function App() {
     // Listen for results relayed through the service worker
     const listener = (message: any) => {
       if (message.type === 'SPEECH_RESULT') {
-        setQuery(message.text);
-      } else if (message.type === 'SPEECH_END' || message.type === 'SPEECH_ERROR') {
+        // Append to existing text (don't overwrite)
+        setQuery((prev) => {
+          const base = prev.trim();
+          return base ? base + ' ' + message.text : message.text;
+        });
+        // Auto-expand textarea
+        setTimeout(() => {
+          const ta = document.querySelector('textarea') as HTMLTextAreaElement;
+          if (ta) { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 200) + 'px'; }
+        }, 50);
+      } else if (message.type === 'SPEECH_END') {
         setIsListening(false);
         chrome.runtime.onMessage.removeListener(listener);
+      } else if (message.type === 'SPEECH_ERROR') {
+        setIsListening(false);
+        chrome.runtime.onMessage.removeListener(listener);
+        if (message.error === 'not-allowed' || message.error === 'not-supported') {
+          setIndexResult('🎤 Voice input requires a regular web page. Open any website tab and try again.');
+        }
       }
     };
     chrome.runtime.onMessage.addListener(listener);
