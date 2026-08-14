@@ -426,6 +426,7 @@ function App() {
     }
 
     setIsListening(true);
+    setIndexResult(null); // Clear any previous error message
 
     // Ask the content script (which runs on the page) to start speech recognition
     chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
