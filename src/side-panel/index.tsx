@@ -367,7 +367,11 @@ function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `coursechat-${answers.length > 0 ? answers[answers.length - 1].query.slice(0, 30).replace(/[^a-zA-Z0-9 ]/g, '').trim().replace(/\s+/g, '-').toLowerCase() : 'chat'}-${new Date().toLocaleTimeString('en-US', { hour12: false }).replace(/:/g, '')}.md`;
+    const firstQ = answers.length > 0 ? answers[answers.length - 1].query.slice(0, 30).replace(/[^a-zA-Z0-9 ]/g, '').trim().replace(/\s+/g, '-').toLowerCase() : 'chat';
+    const now = new Date();
+    const date = now.toISOString().slice(0, 10); // 2026-08-14
+    const time = `${String(now.getHours()).padStart(2,'0')}-${String(now.getMinutes()).padStart(2,'0')}`;
+    a.download = `coursechat-${firstQ}-${date}-${time}.md`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
