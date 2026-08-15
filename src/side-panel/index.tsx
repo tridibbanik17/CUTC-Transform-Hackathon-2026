@@ -286,6 +286,7 @@ function App() {
   const [isListening, setIsListening] = useState(false);
   const [speechSupported] = useState(false); // Removed: use OS voice typing instead
   const [answers, setAnswers] = useState<Array<{ query: string; answer: string; status: string; citations: any[] }>>([]);
+  const [previewFile, setPreviewFile] = useState<{ name: string; text: string } | null>(null);
 
   // Persist chat history to chrome.storage.local
   function persistHistory(history: typeof answers) {
@@ -465,6 +466,15 @@ function App() {
     await chrome.storage.local.remove([...keysToRemove, 'course_context_default-course', 'course_files_default-course']);
     setUploadedFiles([]); setTotalChars(0);
     setIndexResult('Cleared. Upload new files to start fresh.');
+  }
+
+  // Open file preview: loads stored text for the file
+  async function handlePreviewFile(fileName: string) {
+    const result = await new Promise<Record<string, string>>((resolve) => {
+      chrome.storage.local.get(`file_text_${fileName}`, (r) => resolve(r as Record<string, string>));
+    });
+    const text = result[`file_text_${fileName}`] || '(No text extracted)';
+    setPreviewFile({ name: fileName, text });
   }
 
   // Voice dictation — runs speech recognition on the active web page (has mic access)
@@ -735,7 +745,7 @@ function App() {
               <input type="file" accept=".pdf,.pptx,.docx,.txt,.md,.py,.java,.js,.cpp,.c,.css,.csv,.ipynb,.html,.doc,.odt,.m" multiple style={{ display: 'none' }} onChange={handleFileUpload} disabled={indexing} />
             </label>
             {hasContent && (
-              <button onClick={handleClearContext} style={{ padding: '9px 12px', background: theme.hoverBg, color: theme.textSecondary, border: `1px solid ${theme.border}`, borderRadius: '8px', fontSize: '12px', cursor: 'pointer' }}>Clear files</button>
+              <button onClick={handleClearContext} style={{ padding: '9px 12px', background: theme.errorBg, color: theme.error, border: `1px solid ${theme.error}`, borderRadius: '8px', fontSize: '12px', cursor: 'pointer', fontWeight: 500 }}>🗑️ Clear Files</button>
             )}
           </div>
 
@@ -750,9 +760,9 @@ function App() {
           {uploadedFiles.length > 0 && (
             <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
               {uploadedFiles.map((f, i) => (
-                <div key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 10px', background: darkMode ? '#2d3748' : '#f0f4f8', border: `1px solid ${darkMode ? '#4a5568' : '#e2e8f0'}`, borderRadius: '20px', fontSize: '11px', color: theme.text, maxWidth: '100%' }}>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f}>📄 {f}</span>
-                  <button onClick={() => handleDeleteFile(f)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: darkMode ? '#fc8181' : '#e53e3e', padding: '0', lineHeight: 1, flexShrink: 0 }} title="Remove file">×</button>
+                <div key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 10px', background: darkMode ? '#2d3748' : '#f0f4f8', border: `1px solid ${darkMode ? '#4a5568' : '#e2e8f0'}`, borderRadius: '20px', fontSize: '11px', color: theme.text, maxWidth: '100%', cursor: 'pointer' }} onClick={() => handlePreviewFile(f)} title={`Click to preview ${f}`}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📄 {f}</span>
+                  <button onClick={(e) => { e.stopPropagation(); handleDeleteFile(f); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: darkMode ? '#fc8181' : '#e53e3e', padding: '0', lineHeight: 1, flexShrink: 0 }} title="Remove file">×</button>
                 </div>
               ))}
             </div>
@@ -838,7 +848,7 @@ function App() {
                 fontWeight: 500,
               }}
             >
-              🗑 Clear All
+              🗑️ Clear All
             </button>
           </div>
           {answers.map((a, i) => (
@@ -859,13 +869,6 @@ function App() {
                 {a.status === 'retrieval_error' && <span style={{ color: theme.error }}>{a.answer || 'Unable to retrieve an answer. Please try again.'}</span>}
                 {a.status === 'error' && <span style={{ color: theme.error }}>{a.answer}</span>}
               </div>
-              {a.citations.length > 0 && (
-                <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: `1px solid ${theme.border}` }}>
-                  {a.citations.map((c, j) => (
-                    <div key={j} style={{ fontSize: '11px', color: theme.accent, margin: '3px 0' }}>{c.fileName} — p.{c.pageNumber} {c.sectionHeading && `(${c.sectionHeading})`}</div>
-                  ))}
-                </div>
-              )}
               {/* Copy + Speaker buttons */}
               <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: `1px solid ${theme.border}`, display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                 <CopyButton text={a.answer} theme={theme} />
@@ -873,6 +876,21 @@ function App() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* File Preview Modal */}
+      {previewFile && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', flexDirection: 'column' }} onClick={() => setPreviewFile(null)}>
+          <div style={{ margin: '16px', flex: 1, display: 'flex', flexDirection: 'column', background: theme.background, borderRadius: '12px', overflow: 'hidden', border: `1px solid ${theme.border}` }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ padding: '12px 16px', borderBottom: `1px solid ${theme.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+              <span style={{ fontWeight: 600, fontSize: '13px', color: theme.text }}>📄 {previewFile.name}</span>
+              <button onClick={() => setPreviewFile(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: theme.textMuted, padding: '0 4px' }}>✕</button>
+            </div>
+            <div style={{ flex: 1, overflow: 'auto', padding: '16px', fontSize: '12px', lineHeight: 1.6, color: theme.text, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'monospace' }}>
+              {previewFile.text}
+            </div>
+          </div>
         </div>
       )}
     </div>
