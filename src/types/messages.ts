@@ -53,6 +53,11 @@ export interface GetApiKeyStatusMessage {
   type: 'GET_API_KEY_STATUS';
 }
 
+export interface IndexExtractedTextMessage {
+  type: 'INDEX_EXTRACTED_TEXT';
+  payload: { courseId: string; fileName: string; text: string };
+}
+
 export type ServiceWorkerMessage =
   | GetCourseInfoMessage
   | StartIndexingMessage
@@ -63,7 +68,8 @@ export type ServiceWorkerMessage =
   | GetActivePlatformMessage
   | GetFallbackStatusMessage
   | ValidateApiKeyMessage
-  | GetApiKeyStatusMessage;
+  | GetApiKeyStatusMessage
+  | IndexExtractedTextMessage;
 
 // --- Response Messages (sent FROM service worker) ---
 

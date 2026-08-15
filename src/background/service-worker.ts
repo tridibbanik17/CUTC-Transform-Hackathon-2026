@@ -7,6 +7,8 @@
 import type { ServiceWorkerMessage } from '@/types/messages';
 import { apiKeyManager } from './api-key-manager';
 import { directGeminiQuery, getCourseContext, storeCourseContext } from './direct-gemini';
+import { ragEngine, QueryValidationError, MissingApiKeyError } from './rag-engine';
+import { indexingOrchestrator } from './indexing-orchestrator';
 
 /**
  * Extract readable text strings from raw PDF bytes.
@@ -110,6 +112,13 @@ async function handleMessage(
     case 'PARSE_PDF':
       // This is handled by the offscreen document, not the service worker
       return undefined;
+
+    case 'INDEX_EXTRACTED_TEXT':
+      return indexExtractedText(
+        message.payload.courseId,
+        message.payload.fileName,
+        message.payload.text
+      );
 
     default:
       return { type: 'ERROR', payload: { message: 'Unknown message type' } };
@@ -340,7 +349,13 @@ async function processQuery(courseId: string, query: string) {
     return { type: 'ERROR', payload: { message: 'No API key configured. Please add your Gemini API key in settings.', code: 'NO_API_KEY' } };
   }
 
-  // Basic validation
+  // Basic validation (kept identical to pre-integration behavior — the
+  // side panel allows 1-char queries like "WBS", but rag-engine's
+  // shared validateQuery() requires 3+ chars. Rather than silently
+  // loosening src/shared/validation.ts — not my file to change without
+  // flagging it — a query that's valid by this gate but rejected by
+  // ragEngine's stricter check falls back to the direct-Gemini path
+  // below instead of surfacing an error for something that used to work.)
   const trimmed = query.trim();
   if (trimmed.length < 1) {
     return { type: 'ERROR', payload: { message: 'Please type a question.', code: 'INVALID_QUERY' } };
@@ -349,7 +364,28 @@ async function processQuery(courseId: string, query: string) {
     return { type: 'ERROR', payload: { message: 'Query must be 500 characters or fewer.', code: 'QUERY_TOO_LONG' } };
   }
 
-  // Get API key and course context
+  // --- Primary path: ragEngine -> Backboard.io (retrieval + generation) ---
+  try {
+    const result = await ragEngine.processQuery(courseId, trimmed);
+    // 'retrieval_error' means Backboard itself failed (network/API
+    // error) — fall through to the direct-Gemini fallback below rather
+    // than surfacing a dead end, as long as we have local context to
+    // fall back on.
+    if (result.status !== 'retrieval_error') {
+      return { type: 'QUERY_RESPONSE', payload: result };
+    }
+  } catch (err) {
+    // QueryValidationError (e.g. a 1-2 char query the UI permits but
+    // the shared validator doesn't) or MissingApiKeyError -> fall
+    // through to direct-Gemini below rather than hard-failing.
+    if (!(err instanceof QueryValidationError) && !(err instanceof MissingApiKeyError)) {
+      return { type: 'ERROR', payload: { message: err instanceof Error ? err.message : 'Query failed.', code: 'RAG_ENGINE_ERROR' } };
+    }
+  }
+
+  // --- Fallback path: direct Gemini call over locally cached context ---
+  // Used when Backboard is unreachable, or ragEngine rejected the query
+  // on a rule the UI itself doesn't enforce (see comment above).
   const apiKey = await apiKeyManager.getKey();
   if (!apiKey) {
     return { type: 'ERROR', payload: { message: 'Failed to retrieve API key.', code: 'KEY_ERROR' } };
@@ -360,7 +396,6 @@ async function processQuery(courseId: string, query: string) {
     return { type: 'ERROR', payload: { message: 'Please upload at least one PDF or file first.', code: 'NO_INDEX' } };
   }
 
-  // Direct Gemini query (demo mode — bypasses Backboard.io)
   const result = await directGeminiQuery(apiKey, trimmed, context, courseId);
 
   return {
@@ -481,5 +516,42 @@ async function parsePdfViaOffscreen(base64: string, fileName: string) {
     }
   } catch (err) {
     return { payload: { text: '', error: err instanceof Error ? err.message : 'Unknown error' } };
+  }
+}
+
+async function indexExtractedText(courseId: string, fileName: string, text: string) {
+  // Gate behind API key, same as every other Backboard-touching handler.
+  const hasKey = await apiKeyManager.hasKey();
+  if (!hasKey) {
+    return { type: 'ERROR', payload: { message: 'No API key configured. Please add your Gemini API key in settings.', code: 'NO_API_KEY' } };
+  }
+
+  const apiKey = await apiKeyManager.getKey();
+  if (!apiKey) {
+    return { type: 'ERROR', payload: { message: 'Failed to retrieve API key.', code: 'KEY_ERROR' } };
+  }
+
+  // Best-effort: indexing into Backboard is additive on top of the
+  // side panel's existing local-storage fallback path, so a failure
+  // here is reported but does not throw — the locally cached text
+  // (stored separately by the side panel) still powers the direct-
+  // Gemini fallback in processQuery() if Backboard is unreachable.
+  try {
+    const result = await indexingOrchestrator.indexExtractedDocuments({
+      courseId,
+      apiKey,
+      documents: [{ fileName, text }],
+    });
+    return { type: 'INDEXING_COMPLETE', payload: result };
+  } catch (err) {
+    return {
+      type: 'INDEXING_COMPLETE',
+      payload: {
+        success: false,
+        documentsIndexed: 0,
+        chunksCreated: 0,
+        failures: [{ fileName, error: err instanceof Error ? err.message : 'Backboard indexing failed.' }],
+      },
+    };
   }
 }
