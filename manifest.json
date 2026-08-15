@@ -4,15 +4,10 @@
   "version": "0.1.0",
   "description": "Upload your course materials, ask questions, get cited answers. AI study tutor powered by your free Gemini API key.",
   "permissions": [
-    "activeTab",
     "storage",
     "unlimitedStorage",
-    "scripting",
     "sidePanel",
     "offscreen"
-  ],
-  "host_permissions": [
-    "<all_urls>"
   ],
   "background": {
     "service_worker": "service-worker.js",
@@ -21,15 +16,6 @@
   "side_panel": {
     "default_path": "side-panel/index.html"
   },
-  "content_scripts": [
-    {
-      "matches": [
-        "https://*/*",
-        "http://*/*"
-      ],
-      "js": ["content-script.js"]
-    }
-  ],
   "action": {
     "default_title": "CourseChat"
   },
