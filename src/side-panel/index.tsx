@@ -394,6 +394,14 @@ function App() {
           await chrome.storage.local.set({ [`file_text_${file.name}`]: text });
           filesProcessed++;
           newFileNames.push(file.name);
+          // Best-effort: also index into Backboard.io so questions can
+          // be answered via ragEngine/Backboard. Local storage above
+          // remains the source of truth for the direct-Gemini fallback
+          // if Backboard is unreachable, so a failure here is silent.
+          sendMessage({
+            type: 'INDEX_EXTRACTED_TEXT',
+            payload: { courseId: courseInfo?.courseId ?? 'default-course', fileName: file.name, text },
+          }).catch(() => {});
         } else {
           setIndexResult(`✗ "${file.name}" could not be parsed.`);
         }
