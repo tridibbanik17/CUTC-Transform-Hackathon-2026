@@ -36,10 +36,10 @@
   "commands": {
     "_execute_side_panel": {
       "suggested_key": {
-        "default": "Ctrl+Shift+C",
-        "mac": "Command+Shift+C"
+        "default": "Alt+Shift+C",
+        "mac": "Alt+Shift+C"
       },
-      "description": "Open CourseChat side panel"
+      "description": "Open CourseChat"
     }
   },
   "icons": {

@@ -312,6 +312,7 @@ function App() {
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
   const [totalChars, setTotalChars] = useState(0);
   const [darkMode, setDarkMode] = useState(false);
+  const [showTips, setShowTips] = useState(false);
 
   const theme = darkMode ? darkTheme : lightTheme;
 
@@ -675,7 +676,7 @@ function App() {
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', paddingBottom: '12px', borderBottom: `2px solid ${theme.accent}` }}>
-        <div style={{ width: '28px', height: '28px', background: `linear-gradient(135deg, ${theme.accent}, ${theme.accentDark})`, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '14px' }}>C</div>
+        <img src="../icons/icon48.png" alt="CourseChat" style={{ width: '28px', height: '28px', borderRadius: '8px' }} />
         <span style={{ fontSize: '20px', fontWeight: 700, color: theme.accent }}>CourseChat</span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '6px' }}>
           <button
@@ -770,7 +771,7 @@ function App() {
       {!hasKey && !showSettings && (
         <div style={{ marginBottom: '16px', background: theme.warningBg, padding: '14px', borderRadius: '10px', border: `1px solid ${darkMode ? '#5a5020' : '#fdd835'}` }}>
           <strong style={{ fontSize: '14px' }}>Welcome to CourseChat!</strong>
-          <p style={{ fontSize: '12px', margin: '6px 0 0', color: theme.textSecondary }}>Click the gear icon above to add your free Gemini API key and start asking questions.</p>
+          <p style={{ fontSize: '12px', margin: '6px 0 0', color: theme.textSecondary }}>Click the ⚙️ gear icon above to add your free Gemini API key and start asking questions.</p>
         </div>
       )}
 
@@ -871,9 +872,26 @@ function App() {
             </div>
             <span style={{ fontSize: '11px', color: theme.textMuted }}>{query.length}/2000</span>
           </div>
-          <div style={{ fontSize: '10px', color: theme.textMuted, marginTop: '4px' }}>
-            🎤 Voice typing: click the text box above, then press {voiceTip} to dictate your question
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '6px' }}>
+            <button onClick={() => setShowTips(!showTips)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '11px', color: theme.accent, padding: 0, fontWeight: 500 }}>
+              💡 {showTips ? 'Hide tips' : 'Tips & shortcuts'}
+            </button>
           </div>
+          {showTips && (
+            <div style={{ marginTop: '8px', padding: '10px 12px', background: darkMode ? '#1e2a3a' : '#f0f7ff', border: `1px solid ${darkMode ? '#2d4a6f' : '#bdd7f1'}`, borderRadius: '8px', fontSize: '11px', color: theme.textSecondary, lineHeight: 1.7 }}>
+              <div style={{ fontWeight: 600, marginBottom: '6px', fontSize: '12px' }}>💡 Tips for using CourseChat</div>
+              <div>🎤 <strong>Voice typing:</strong> Click the text box, then press <strong>{voiceTip}</strong> to dictate your question</div>
+              <div>⌨️ <strong>Keyboard shortcut:</strong> Set a shortcut at <span style={{ fontFamily: 'monospace', fontSize: '10px', background: darkMode ? '#2d3748' : '#e2e8f0', padding: '1px 4px', borderRadius: '3px' }}>chrome://extensions/shortcuts</span> (e.g. Alt+Shift+C)</div>
+              <div>📄 <strong>File preview:</strong> Click any uploaded file tile to see the extracted text</div>
+              <div>📋 <strong>Copy answers:</strong> Use the Copy button to paste well-formatted text into your notes</div>
+              <div>🔊 <strong>Listen:</strong> Click Listen to hear answers read aloud</div>
+              <div>📥 <strong>Export:</strong> Export your full Q&A session as a Markdown file</div>
+              <div>🗑️ <strong>Manage:</strong> Delete individual Q&As with the ✕ button, or clear all with Clear All</div>
+              <div>⏎ <strong>Quick ask:</strong> Press Enter to submit your question (Shift+Enter for new line)</div>
+              <div>📂 <strong>Supported files:</strong> PDF, PPTX, DOCX, DOC, ODT, HTML, Jupyter, TXT, source code, CSV</div>
+              <div style={{ marginTop: '6px', color: theme.textMuted, fontSize: '10px' }}>Tip: Upload all your course materials at once for the best answers!</div>
+            </div>
+          )}
         </div>
       )}
 
