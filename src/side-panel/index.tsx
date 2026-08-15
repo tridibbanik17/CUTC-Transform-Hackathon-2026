@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
-import { PrivacyNotice, PRIVACY_NOTICE_SESSION_KEY } from './components/PrivacyNotice';
 
 const CHAT_HISTORY_KEY = 'coursechat-chat-history';
 
@@ -309,16 +308,11 @@ function App() {
   const [indexResult, setIndexResult] = useState<string | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
   const [totalChars, setTotalChars] = useState(0);
-  const [privacyAcknowledged, setPrivacyAcknowledged] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
 
   const theme = darkMode ? darkTheme : lightTheme;
 
   useEffect(() => {
-    chrome.storage.local.get([PRIVACY_NOTICE_SESSION_KEY], (result) => {
-      setPrivacyAcknowledged(Boolean(result[PRIVACY_NOTICE_SESSION_KEY]));
-    });
-
     chrome.storage.local.get([STORAGE_KEYS.darkMode], (result) => {
       setDarkMode(Boolean(result[STORAGE_KEYS.darkMode]));
     });
@@ -348,16 +342,7 @@ function App() {
     try { return await chrome.runtime.sendMessage(message); } catch { return null; }
   }
 
-  function handleAcknowledgePrivacyNotice() {
-    chrome.storage.local.set({ [PRIVACY_NOTICE_SESSION_KEY]: true }).catch(() => {});
-    setPrivacyAcknowledged(true);
-  }
-
   async function handleSaveKey() {
-    if (!privacyAcknowledged) {
-      setKeyError('Please acknowledge the privacy notice first.');
-      return;
-    }
     setKeyError(''); setKeySuccess(''); setKeyLoading(true);
     const res = await sendMessage({ type: 'VALIDATE_API_KEY', payload: { key: apiKey } });
     setKeyLoading(false);
@@ -616,7 +601,7 @@ function App() {
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey && privacyAcknowledged) { e.preventDefault(); handleQuery(); }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleQuery(); }
   }
 
   const hasContent = totalChars > 0 || uploadedFiles.length > 0;
@@ -731,11 +716,6 @@ function App() {
         </div>
       )}
 
-      {/* Privacy Notice */}
-      {!privacyAcknowledged && (
-        <PrivacyNotice onAcknowledge={handleAcknowledgePrivacyNotice} darkMode={darkMode} />
-      )}
-
       {/* Upload Section */}
       {hasKey && (
         <div style={{ marginBottom: '16px' }}>
@@ -789,7 +769,7 @@ function App() {
           />
           <div style={{ display: 'flex', marginTop: '8px', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <button onClick={handleQuery} disabled={queryLoading || query.trim().length < 1 || !privacyAcknowledged} style={{ padding: '10px 20px', background: queryLoading || query.trim().length < 1 || !privacyAcknowledged ? (darkMode ? '#3a5070' : '#a0c4f0') : '#1a73e8', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', cursor: queryLoading ? 'wait' : 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button onClick={handleQuery} disabled={queryLoading || query.trim().length < 1} style={{ padding: '10px 20px', background: queryLoading || query.trim().length < 1 ? (darkMode ? '#3a5070' : '#a0c4f0') : '#1a73e8', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', cursor: queryLoading ? 'wait' : 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
                 {queryLoading ? <><Spinner /> Thinking...</> : 'Ask'}
               </button>
               {speechSupported && (
@@ -809,7 +789,6 @@ function App() {
           <div style={{ fontSize: '10px', color: theme.textMuted, marginTop: '4px' }}>
             🎤 Voice typing: click the text box above, then press {voiceTip} to dictate your question
           </div>
-          {!privacyAcknowledged && <div style={{ fontSize: '11px', color: darkMode ? '#fdd835' : '#8a6d3b', marginTop: '8px' }}>Acknowledge the privacy notice above before asking a question.</div>}
         </div>
       )}
 
