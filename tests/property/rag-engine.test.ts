@@ -64,11 +64,11 @@ describe('RAGEngineImpl', () => {
       expect(backboard.query).not.toHaveBeenCalled();
     });
 
-    it('rejects a query over 500 characters', async () => {
+    it('rejects a query over 2000 characters', async () => {
       const backboard = makeBackboardStub();
       const engine = new RAGEngineImpl(backboard, makeKeyManagerStub());
 
-      await expect(engine.processQuery('course-1', 'a'.repeat(501))).rejects.toThrow(QueryValidationError);
+      await expect(engine.processQuery('course-1', 'a'.repeat(2001))).rejects.toThrow(QueryValidationError);
       expect(backboard.query).not.toHaveBeenCalled();
     });
 
@@ -330,8 +330,8 @@ describe('RAGEngineImpl', () => {
       );
     });
 
-    it("processQuery truncates Backboard's answer if it exceeds 300 words", async () => {
-      const overLongAnswer = Array.from({ length: 400 }, (_, i) => `word${i}`).join(' ');
+    it("processQuery truncates Backboard's answer if it exceeds 1000 words", async () => {
+      const overLongAnswer = Array.from({ length: 1200 }, (_, i) => `word${i}`).join(' ');
       const backboard = makeBackboardStub({
         query: vi.fn(async () => ({
           answer: overLongAnswer,
@@ -344,7 +344,7 @@ describe('RAGEngineImpl', () => {
 
       const result = await engine.processQuery('course-1', validQuery);
       const wordCount = result.answer.replace('…', '').trim().split(/\s+/).length;
-      expect(wordCount).toBeLessThanOrEqual(300);
+      expect(wordCount).toBeLessThanOrEqual(1000);
     });
   });
 
