@@ -35,7 +35,7 @@ const INSUFFICIENT_CONFIDENCE_THRESHOLD = 0.4;
 const SUCCESS_CONFIDENCE_THRESHOLD = 0.6;
 
 /** Generated answers must never exceed this many words. */
-const MAX_ANSWER_WORDS = 300;
+const MAX_ANSWER_WORDS = 1000;
 
 /**
  * Thrown when the query fails validation (empty, too short, too long).
