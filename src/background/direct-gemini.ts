@@ -89,26 +89,29 @@ ${courseContext}`;
 
 /**
  * Extract citation-like references from Gemini's response text.
- * Looks for patterns like "page X", "slide X", or file name mentions.
+ * Looks for patterns like "Source: [filename], Page X" or "page X" with
+ * context from the course material markers ([fileName]) in the prompt.
  */
 function extractCitationsFromResponse(text: string): Array<{ fileName: string; pageNumber: number; sectionHeading: string }> {
   const citations: Array<{ fileName: string; pageNumber: number; sectionHeading: string }> = [];
 
-  // Match patterns like "page 5", "slide 3", "p. 12"
-  const pageMatches = text.matchAll(/(?:page|slide|p\.?)\s*(\d+)/gi);
-  for (const match of pageMatches) {
-    citations.push({
-      fileName: 'Course Material',
-      pageNumber: parseInt(match[1]),
-      sectionHeading: '',
-    });
+  // Match explicit source references: [chapter 2.pdf], Page 14 or Source: [file.pdf], Page 7
+  const sourceMatches = text.matchAll(/\[([^\]]+\.\w+)\][\s,]*(?:page|pages|p\.?)\s*([\d]+(?:\s*(?:and|,)\s*\d+)*)/gi);
+  for (const match of sourceMatches) {
+    const fileName = match[1];
+    // Handle "Pages 12 and 14" → extract each page number
+    const pageNums = match[2].match(/\d+/g) ?? [];
+    for (const p of pageNums) {
+      citations.push({ fileName, pageNumber: parseInt(p), sectionHeading: '' });
+    }
   }
 
-  // Deduplicate by page number
-  const seen = new Set<number>();
+  // Deduplicate by fileName + pageNumber
+  const seen = new Set<string>();
   return citations.filter((c) => {
-    if (seen.has(c.pageNumber)) return false;
-    seen.add(c.pageNumber);
+    const key = `${c.fileName}:${c.pageNumber}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
     return true;
   });
 }
