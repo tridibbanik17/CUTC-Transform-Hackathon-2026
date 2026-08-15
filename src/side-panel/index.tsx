@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
+import { extractPptxText, extractDocxText, extractDocText, extractOdtText } from '@/shared/binary-extractors';
 
 const CHAT_HISTORY_KEY = 'coursechat-chat-history';
 
@@ -372,22 +373,52 @@ function App() {
         if (file.name.endsWith('.pdf')) {
           const buffer = await file.arrayBuffer();
           text = await parsePdfInIframe(buffer);
+        } else if (file.name.endsWith('.pptx')) {
+          const buffer = await file.arrayBuffer();
+          text = await extractPptxText(buffer);
+        } else if (file.name.endsWith('.docx')) {
+          const buffer = await file.arrayBuffer();
+          text = await extractDocxText(buffer);
+        } else if (file.name.endsWith('.doc')) {
+          const buffer = await file.arrayBuffer();
+          text = extractDocText(buffer);
+        } else if (file.name.endsWith('.odt')) {
+          const buffer = await file.arrayBuffer();
+          text = await extractOdtText(buffer);
         } else {
           text = (await file.text()).trim();
         }
         if (text.length > 0) {
-          // Store each file individually
-          await chrome.storage.local.set({ [`file_text_${file.name}`]: text });
+          // Store file text locally — with unlimitedStorage permission this
+          // should always succeed, but handle errors gracefully just in case.
+          try {
+            await chrome.storage.local.set({ [`file_text_${file.name}`]: text });
+          } catch (storageErr) {
+            console.warn(`Storage error for ${file.name}:`, storageErr);
+          }
           filesProcessed++;
           newFileNames.push(file.name);
-          // Best-effort: also index into Backboard.io so questions can
-          // be answered via ragEngine/Backboard. Local storage above
-          // remains the source of truth for the direct-Gemini fallback
-          // if Backboard is unreachable, so a failure here is silent.
-          sendMessage({
-            type: 'INDEX_EXTRACTED_TEXT',
-            payload: { courseId: courseInfo?.courseId ?? 'default-course', fileName: file.name, text },
-          }).catch(() => {});
+          // Index into Backboard.io. Chrome message passing has a practical
+          // size limit (~50MB) and the service worker can get killed with very
+          // large payloads. Send in chunks if the text is large.
+          const MAX_CHUNK_SIZE = 500_000; // 500k chars per message — safe for SW
+          const courseId = courseInfo?.courseId ?? 'default-course';
+          if (text.length <= MAX_CHUNK_SIZE) {
+            sendMessage({
+              type: 'INDEX_EXTRACTED_TEXT',
+              payload: { courseId, fileName: file.name, text },
+            }).catch(() => {});
+          } else {
+            // Split into chunks and send sequentially to avoid crashing SW
+            for (let start = 0; start < text.length; start += MAX_CHUNK_SIZE) {
+              const chunk = text.slice(start, start + MAX_CHUNK_SIZE);
+              const chunkName = start === 0 ? file.name : `${file.name} (part ${Math.floor(start / MAX_CHUNK_SIZE) + 1})`;
+              sendMessage({
+                type: 'INDEX_EXTRACTED_TEXT',
+                payload: { courseId, fileName: chunkName, text: chunk },
+              }).catch(() => {});
+            }
+          }
         } else {
           setIndexResult(`✗ "${file.name}" could not be parsed.`);
         }
@@ -423,7 +454,11 @@ function App() {
       const text = result[`file_text_${f}`] || '';
       if (text) combined += `\n\n[${f}]\n${text}`;
     }
-    await chrome.storage.local.set({ 'course_context_default-course': combined });
+    try {
+      await chrome.storage.local.set({ 'course_context_default-course': combined });
+    } catch (err) {
+      console.warn('Failed to store combined context:', err);
+    }
     setTotalChars(combined.length);
   }
 
