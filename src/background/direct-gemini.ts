@@ -30,7 +30,7 @@ If the answer is clearly not in the materials at all, say "I couldn't find this 
 However, if the question is related to topics in the materials, answer it even if the exact wording doesn't match. Be helpful, not overly strict.
 Always cite which document and page/section the information comes from.
 Keep answers thorough but well-structured. Use bullet points for clarity.
-Do NOT use LaTeX notation. Use plain text with Unicode symbols for units (e.g. Ω, °C, µ, ², ³).
+Do NOT use LaTeX notation ($, \\times, \\frac, \\text{}, ^{}, etc.). Use plain text with Unicode symbols instead: × for multiplication, superscript digits (², ³, ⁴...) for powers, subscript digits (₁, ₂...) for subscripts, log₂ for log base 2, and standard symbols for units (Ω, °C, µ, KB, MB).
 
 COURSE MATERIALS:
 ${courseContext}`;
