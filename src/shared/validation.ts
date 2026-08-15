@@ -9,7 +9,7 @@ export interface ValidationResult {
 }
 
 const MIN_QUERY_LENGTH = 3;
-const MAX_QUERY_LENGTH = 500;
+const MAX_QUERY_LENGTH = 2000;
 
 /**
  * Validate a query string before processing.
