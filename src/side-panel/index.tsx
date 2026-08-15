@@ -595,6 +595,19 @@ function App() {
     setQuery('');
   }
 
+  async function retryQuery(originalQuery: string, answerIndex: number) {
+    setQueryLoading(true);
+    const res = await sendMessage({ type: 'PROCESS_QUERY', payload: { courseId: courseInfo?.courseId ?? 'default-course', query: originalQuery } });
+    setQueryLoading(false);
+    if (res?.type === 'QUERY_RESPONSE') {
+      const entry = { query: originalQuery, answer: res.payload.answer, status: res.payload.status, citations: res.payload.citations };
+      setAnswers((prev) => { const updated = [...prev]; updated[answerIndex] = entry; persistHistory(updated); return updated; });
+    } else if (res?.type === 'ERROR') {
+      const entry = { query: originalQuery, answer: res.payload.message, status: 'error', citations: [] };
+      setAnswers((prev) => { const updated = [...prev]; updated[answerIndex] = entry; persistHistory(updated); return updated; });
+    }
+  }
+
   function handleClearHistory() {
     if (!confirm('Clear all chat history? This cannot be undone.')) return;
     setAnswers([]);
@@ -917,8 +930,18 @@ function App() {
                 {a.status === 'insufficient_information' && (
                   <span style={{ color: theme.textMuted, fontStyle: 'italic' }}>Couldn't find enough information in the course materials to answer this question.</span>
                 )}
-                {a.status === 'retrieval_error' && <span style={{ color: theme.error }}>{a.answer || 'Unable to retrieve an answer. Please try again.'}</span>}
-                {a.status === 'error' && <span style={{ color: theme.error }}>{a.answer}</span>}
+                {a.status === 'retrieval_error' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span style={{ color: theme.error }}>{a.answer || 'Unable to retrieve an answer.'}</span>
+                    <button onClick={() => retryQuery(a.query, i)} disabled={queryLoading} style={{ padding: '4px 10px', background: theme.accent, color: '#fff', border: 'none', borderRadius: '6px', fontSize: '11px', cursor: 'pointer', fontWeight: 500, whiteSpace: 'nowrap' }}>↻ Try again</button>
+                  </div>
+                )}
+                {a.status === 'error' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span style={{ color: theme.error }}>{a.answer}</span>
+                    <button onClick={() => retryQuery(a.query, i)} disabled={queryLoading} style={{ padding: '4px 10px', background: theme.accent, color: '#fff', border: 'none', borderRadius: '6px', fontSize: '11px', cursor: 'pointer', fontWeight: 500, whiteSpace: 'nowrap' }}>↻ Try again</button>
+                  </div>
+                )}
               </div>
               {/* Copy + Speaker buttons */}
               <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: `1px solid ${theme.border}`, display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
