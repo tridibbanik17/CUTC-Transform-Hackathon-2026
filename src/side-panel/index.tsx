@@ -558,6 +558,7 @@ function App() {
   }
 
   function handleClearHistory() {
+    if (!confirm('Clear all chat history? This cannot be undone.')) return;
     setAnswers([]);
     chrome.storage.local.remove(STORAGE_KEYS.chatHistory);
   }
