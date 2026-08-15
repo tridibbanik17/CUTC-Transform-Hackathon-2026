@@ -85,6 +85,26 @@ npm install
 npm test
 ```
 
+## Limits & Constraints
+
+Now that Backboard.io handles the full RAG pipeline (chunking, embeddings, vector storage, generation), several client-side constraints have been relaxed:
+
+| Constraint | Old Value | New Value | Rationale |
+|------------|-----------|-----------|-----------|
+| **Document content cap** | 80,000 characters (hard truncation) | No limit | Backboard handles chunking/embedding server-side — no need to cap extracted text locally |
+| **Query input length** | 500 characters | 2,000 characters | Backboard's retrieval pipeline handles longer, more detailed queries effectively |
+| **Answer word limit** | 300 words (hard truncation with ellipsis) | 1,000 words | Complex multi-part questions deserve thorough, cited answers |
+| **Upload button** | Disabled at 80k chars ("Limit reached") | Always enabled (disabled only during active processing) | No local text budget to exhaust |
+
+### Constraints that remain unchanged
+
+| Constraint | Value | Reason |
+|------------|-------|--------|
+| **Per-file size** | 50 MB | Browser memory guard — large files would freeze the service worker |
+| **Re-index timeout** | 15 minutes | Operational safeguard against runaway indexing |
+| **Retry attempts** | 2 retries (Backboard & Gemini) | Network reliability — exponential backoff on 500/503 |
+| **Gemini fallback chain** | 3 models deep | Rate-limit resilience across quota pools |
+
 ## Team
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for team assignments and workflow.
