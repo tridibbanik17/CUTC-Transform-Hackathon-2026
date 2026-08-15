@@ -316,6 +316,7 @@ function App() {
   const [totalChars, setTotalChars] = useState(0);
   const [darkMode, setDarkMode] = useState(false);
   const [showTips, setShowTips] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
 
   const theme = darkMode ? darkTheme : lightTheme;
 
@@ -790,14 +791,41 @@ function App() {
       {/* Upload Section */}
       {hasKey && (
         <div style={{ marginBottom: '16px' }}>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <label style={{ padding: '9px 16px', background: theme.accent, color: '#fff', borderRadius: '8px', fontSize: '13px', cursor: indexing ? 'not-allowed' : 'pointer', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '6px', opacity: indexing ? 0.6 : 1 }}>
-              {indexing ? <><Spinner /> {uploadProgress ? `Processing ${uploadProgress.current}/${uploadProgress.total}...` : 'Processing...'}</> : 'Upload PDF/file'}
-              <input type="file" accept=".pdf,.pptx,.docx,.txt,.md,.py,.java,.js,.cpp,.c,.css,.csv,.ipynb,.html,.doc,.odt,.m,.tex" multiple style={{ display: 'none' }} onChange={handleFileUpload} disabled={indexing} />
-            </label>
-            {hasContent && (
-              <button onClick={handleClearContext} style={{ padding: '9px 12px', background: theme.errorBg, color: theme.error, border: `1px solid ${theme.error}`, borderRadius: '8px', fontSize: '12px', cursor: 'pointer', fontWeight: 500 }}>🗑️ Clear Files</button>
-            )}
+          {/* Drag & Drop Zone */}
+          <div
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(true); }}
+            onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(true); }}
+            onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(false); }}
+            onDrop={(e) => {
+              e.preventDefault(); e.stopPropagation(); setDragOver(false);
+              if (indexing) return;
+              const files = e.dataTransfer.files;
+              if (files && files.length > 0) {
+                const fakeEvent = { target: { files, value: '' } } as unknown as React.ChangeEvent<HTMLInputElement>;
+                handleFileUpload(fakeEvent);
+              }
+            }}
+            style={{
+              border: `2px dashed ${dragOver ? theme.accent : theme.borderLight}`,
+              borderRadius: '12px',
+              padding: '16px',
+              background: dragOver ? (darkMode ? '#1e293b' : '#eef6ff') : 'transparent',
+              transition: 'all 0.2s ease',
+              marginBottom: '8px',
+            }}
+          >
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <label style={{ padding: '9px 16px', background: theme.accent, color: '#fff', borderRadius: '8px', fontSize: '13px', cursor: indexing ? 'not-allowed' : 'pointer', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '6px', opacity: indexing ? 0.6 : 1 }}>
+                {indexing ? <><Spinner /> {uploadProgress ? `Processing ${uploadProgress.current}/${uploadProgress.total}...` : 'Processing...'}</> : '📁 Upload Files'}
+                <input type="file" accept=".pdf,.pptx,.docx,.txt,.md,.py,.java,.js,.cpp,.c,.css,.csv,.ipynb,.html,.doc,.odt,.m,.tex" multiple style={{ display: 'none' }} onChange={handleFileUpload} disabled={indexing} />
+              </label>
+              {hasContent && (
+                <button onClick={handleClearContext} style={{ padding: '9px 12px', background: theme.errorBg, color: theme.error, border: `1px solid ${theme.error}`, borderRadius: '8px', fontSize: '12px', cursor: 'pointer', fontWeight: 500 }}>🗑️ Clear Files</button>
+              )}
+            </div>
+            <div style={{ marginTop: '8px', fontSize: '11px', color: theme.textMuted, textAlign: 'center' }}>
+              {dragOver ? '⬇️ Drop files here to upload' : 'or drag & drop files here'}
+            </div>
           </div>
 
           {/* Files indexed counter */}
