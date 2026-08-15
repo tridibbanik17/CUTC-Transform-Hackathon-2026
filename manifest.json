@@ -2,10 +2,11 @@
   "manifest_version": 3,
   "name": "CourseChat",
   "version": "0.1.0",
-  "description": "Turn your LMS course page into an AI-powered study tutor with cited sources.",
+  "description": "Upload your course materials, ask questions, get cited answers. AI study tutor powered by your free Gemini API key.",
   "permissions": [
     "activeTab",
     "storage",
+    "unlimitedStorage",
     "scripting",
     "sidePanel",
     "offscreen"
