@@ -374,6 +374,15 @@ function App() {
     for (let idx = 0; idx < fileArray.length; idx++) {
       const file = fileArray[idx];
       if (uploadedFiles.includes(file.name)) { skipped++; continue; }
+
+      // Validate file extension — reject unsupported formats
+      const supportedExtensions = ['.pdf', '.pptx', '.docx', '.doc', '.odt', '.html', '.ipynb', '.txt', '.md', '.py', '.java', '.js', '.cpp', '.c', '.css', '.csv', '.m', '.tex'];
+      const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+      if (!supportedExtensions.includes(ext)) {
+        setFileErrors(prev => [...prev, `"${file.name}" is not a supported file type.`]);
+        continue;
+      }
+
       setUploadProgress({ current: idx + 1, total: totalFiles, currentFile: file.name });
       try {
         let text = '';
@@ -781,7 +790,7 @@ function App() {
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <label style={{ padding: '9px 16px', background: theme.accent, color: '#fff', borderRadius: '8px', fontSize: '13px', cursor: indexing ? 'not-allowed' : 'pointer', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '6px', opacity: indexing ? 0.6 : 1 }}>
               {indexing ? <><Spinner /> {uploadProgress ? `Processing ${uploadProgress.current}/${uploadProgress.total}...` : 'Processing...'}</> : 'Upload PDF/file'}
-              <input type="file" accept=".pdf,.pptx,.docx,.txt,.md,.py,.java,.js,.cpp,.c,.css,.csv,.ipynb,.html,.doc,.odt,.m" multiple style={{ display: 'none' }} onChange={handleFileUpload} disabled={indexing} />
+              <input type="file" accept=".pdf,.pptx,.docx,.txt,.md,.py,.java,.js,.cpp,.c,.css,.csv,.ipynb,.html,.doc,.odt,.m,.tex" multiple style={{ display: 'none' }} onChange={handleFileUpload} disabled={indexing} />
             </label>
             {hasContent && (
               <button onClick={handleClearContext} style={{ padding: '9px 12px', background: theme.errorBg, color: theme.error, border: `1px solid ${theme.error}`, borderRadius: '8px', fontSize: '12px', cursor: 'pointer', fontWeight: 500 }}>🗑️ Clear Files</button>
