@@ -307,6 +307,8 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [indexing, setIndexing] = useState(false);
   const [indexResult, setIndexResult] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number; currentFile: string } | null>(null);
+  const [fileErrors, setFileErrors] = useState<string[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
   const [totalChars, setTotalChars] = useState(0);
   const [darkMode, setDarkMode] = useState(false);
@@ -361,13 +363,17 @@ function App() {
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-    setIndexing(true); setIndexResult(null);
+    setIndexing(true); setIndexResult(null); setFileErrors([]);
     let filesProcessed = 0;
     let skipped = 0;
     const newFileNames: string[] = [];
+    const fileArray = Array.from(files);
+    const totalFiles = fileArray.length;
 
-    for (const file of Array.from(files)) {
+    for (let idx = 0; idx < fileArray.length; idx++) {
+      const file = fileArray[idx];
       if (uploadedFiles.includes(file.name)) { skipped++; continue; }
+      setUploadProgress({ current: idx + 1, total: totalFiles, currentFile: file.name });
       try {
         let text = '';
         if (file.name.endsWith('.pdf')) {
@@ -420,11 +426,15 @@ function App() {
             }
           }
         } else {
-          setIndexResult(`✗ "${file.name}" could not be parsed.`);
+          setFileErrors(prev => [...prev, `"${file.name}" could not be parsed.`]);
         }
-      } catch (err) { console.error(`Failed: ${file.name}`, err); }
+      } catch (err) {
+        console.error(`Failed: ${file.name}`, err);
+        setFileErrors(prev => [...prev, `"${file.name}" failed: ${err instanceof Error ? err.message : 'Unknown error'}`]);
+      }
     }
 
+    setUploadProgress(null);
     if (skipped > 0 && filesProcessed === 0) {
       setIndexResult(`⚠️ ${skipped} file(s) already uploaded. Skipped duplicates.`);
       setIndexing(false); e.target.value = ''; return;
@@ -756,7 +766,7 @@ function App() {
         <div style={{ marginBottom: '16px' }}>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <label style={{ padding: '9px 16px', background: theme.accent, color: '#fff', borderRadius: '8px', fontSize: '13px', cursor: indexing ? 'not-allowed' : 'pointer', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '6px', opacity: indexing ? 0.6 : 1 }}>
-              {indexing ? <><Spinner /> Processing...</> : 'Upload PDF/file'}
+              {indexing ? <><Spinner /> {uploadProgress ? `Processing ${uploadProgress.current}/${uploadProgress.total}...` : 'Processing...'}</> : 'Upload PDF/file'}
               <input type="file" accept=".pdf,.pptx,.docx,.txt,.md,.py,.java,.js,.cpp,.c,.css,.csv,.ipynb,.html,.doc,.odt,.m" multiple style={{ display: 'none' }} onChange={handleFileUpload} disabled={indexing} />
             </label>
             {hasContent && (
@@ -786,6 +796,33 @@ function App() {
           {indexResult && (
             <div style={{ fontSize: '12px', marginTop: '8px', color: indexResult.startsWith('✓') ? theme.success : indexResult.startsWith('Cleared') ? theme.textMuted : theme.error }}>
               {indexResult}
+            </div>
+          )}
+
+          {/* Upload progress bar */}
+          {uploadProgress && (
+            <div style={{ marginTop: '8px' }}>
+              <div style={{ fontSize: '11px', color: theme.textMuted, marginBottom: '4px' }}>
+                Processing: {uploadProgress.currentFile}
+              </div>
+              <div style={{ width: '100%', height: '4px', background: darkMode ? '#4a5568' : '#e2e8f0', borderRadius: '2px', overflow: 'hidden' }}>
+                <div style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%`, height: '100%', background: theme.accent, borderRadius: '2px', transition: 'width 0.3s ease' }} />
+              </div>
+              <div style={{ fontSize: '10px', color: theme.textMuted, marginTop: '2px', textAlign: 'right' as const }}>
+                {uploadProgress.current} of {uploadProgress.total}
+              </div>
+            </div>
+          )}
+
+          {/* Per-file error toasts */}
+          {fileErrors.length > 0 && (
+            <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              {fileErrors.map((err, i) => (
+                <div key={i} style={{ fontSize: '11px', padding: '6px 10px', background: theme.errorBg, border: `1px solid ${theme.error}`, borderRadius: '6px', color: theme.error, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>✗ {err}</span>
+                  <button onClick={() => setFileErrors(prev => prev.filter((_, idx) => idx !== i))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: theme.error, fontSize: '12px', flexShrink: 0, padding: 0 }}>✕</button>
+                </div>
+              ))}
             </div>
           )}
         </div>
