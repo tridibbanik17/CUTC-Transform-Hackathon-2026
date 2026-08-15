@@ -421,7 +421,6 @@ function App() {
       await rebuildContext(allFileNames);
       let msg = `✓ Uploaded ${filesProcessed} file(s). Ready to answer questions!`;
       if (skipped > 0) msg += ` (${skipped} duplicate(s) skipped)`;
-      if (totalChars >= 80000) msg += ' (80k limit reached — some content may be truncated)';
       setIndexResult(msg);
     } else if (!indexResult) { setIndexResult('✗ Could not extract text from uploaded files.'); }
     setIndexing(false); e.target.value = '';
@@ -438,9 +437,8 @@ function App() {
       const text = result[`file_text_${f}`] || '';
       if (text) combined += `\n\n[${f}]\n${text}`;
     }
-    const capped = combined.slice(0, 80000);
-    await chrome.storage.local.set({ 'course_context_default-course': capped });
-    setTotalChars(capped.length);
+    await chrome.storage.local.set({ 'course_context_default-course': combined });
+    setTotalChars(combined.length);
   }
 
   // Delete individual file
@@ -732,9 +730,9 @@ function App() {
       {hasKey && (
         <div style={{ marginBottom: '16px' }}>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <label style={{ padding: '9px 16px', background: totalChars >= 80000 ? (darkMode ? '#4a5568' : '#a0aec0') : theme.accent, color: '#fff', borderRadius: '8px', fontSize: '13px', cursor: totalChars >= 80000 ? 'not-allowed' : 'pointer', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '6px', opacity: totalChars >= 80000 ? 0.6 : 1 }}>
-              {indexing ? <><Spinner /> Processing...</> : totalChars >= 80000 ? '⚠️ Limit reached' : 'Upload PDF/file'}
-              <input type="file" accept=".pdf,.pptx,.docx,.txt,.md,.py,.java,.js,.cpp,.c,.css,.csv,.ipynb,.html,.doc,.odt,.m" multiple style={{ display: 'none' }} onChange={handleFileUpload} disabled={indexing || totalChars >= 80000} />
+            <label style={{ padding: '9px 16px', background: theme.accent, color: '#fff', borderRadius: '8px', fontSize: '13px', cursor: indexing ? 'not-allowed' : 'pointer', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '6px', opacity: indexing ? 0.6 : 1 }}>
+              {indexing ? <><Spinner /> Processing...</> : 'Upload PDF/file'}
+              <input type="file" accept=".pdf,.pptx,.docx,.txt,.md,.py,.java,.js,.cpp,.c,.css,.csv,.ipynb,.html,.doc,.odt,.m" multiple style={{ display: 'none' }} onChange={handleFileUpload} disabled={indexing} />
             </label>
             {hasContent && (
               <button onClick={handleClearContext} style={{ padding: '9px 12px', background: theme.hoverBg, color: theme.textSecondary, border: `1px solid ${theme.border}`, borderRadius: '8px', fontSize: '12px', cursor: 'pointer' }}>Clear files</button>
@@ -775,7 +773,7 @@ function App() {
           <textarea
             style={{ width: '100%', padding: '10px 12px', border: `2px solid ${theme.borderLight}`, borderRadius: '10px', fontSize: '14px', minHeight: '48px', maxHeight: '200px', resize: 'none' as const, boxSizing: 'border-box' as const, transition: 'border-color 0.2s', outline: 'none', background: theme.inputBg, color: theme.text, overflow: 'auto' }}
             placeholder="e.g. What are the deliverables for this week?"
-            value={query} onChange={(e) => { setQuery(e.target.value); e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'; }} onKeyDown={handleKeyDown} maxLength={1000} disabled={queryLoading}
+            value={query} onChange={(e) => { setQuery(e.target.value); e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'; }} onKeyDown={handleKeyDown} maxLength={2000} disabled={queryLoading}
             onFocus={(e) => { e.currentTarget.style.borderColor = theme.accent; }}
             onBlur={(e) => { e.currentTarget.style.borderColor = theme.borderLight; }}
           />
@@ -796,7 +794,7 @@ function App() {
                 </button>
               )}
             </div>
-            <span style={{ fontSize: '11px', color: theme.textMuted }}>{query.length}/1000</span>
+            <span style={{ fontSize: '11px', color: theme.textMuted }}>{query.length}/2000</span>
           </div>
           <div style={{ fontSize: '10px', color: theme.textMuted, marginTop: '4px' }}>
             🎤 Voice typing: click the text box above, then press {voiceTip} to dictate your question
@@ -808,6 +806,41 @@ function App() {
       {/* Answer History */}
       {answers.length > 0 && (
         <div>
+          {/* Clear All + Export buttons */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginBottom: '10px' }}>
+            <button
+              onClick={handleExportChat}
+              title="Export chat as Markdown"
+              style={{
+                padding: '6px 12px',
+                background: theme.hoverBg,
+                color: theme.textSecondary,
+                border: `1px solid ${theme.border}`,
+                borderRadius: '8px',
+                fontSize: '12px',
+                cursor: 'pointer',
+                fontWeight: 500,
+              }}
+            >
+              📥 Export
+            </button>
+            <button
+              onClick={handleClearHistory}
+              title="Clear all chat history"
+              style={{
+                padding: '6px 12px',
+                background: theme.errorBg,
+                color: theme.error,
+                border: `1px solid ${theme.error}`,
+                borderRadius: '8px',
+                fontSize: '12px',
+                cursor: 'pointer',
+                fontWeight: 500,
+              }}
+            >
+              🗑 Clear All
+            </button>
+          </div>
           {answers.map((a, i) => (
             <div key={i} style={{ marginBottom: '16px', padding: '14px', background: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: '12px', boxShadow: `0 1px 3px ${theme.shadow}`, position: 'relative' as const }}>
               <button onClick={() => { const updated = answers.filter((_, idx) => idx !== i); setAnswers(updated); persistHistory(updated); }} style={{ position: 'absolute' as const, top: '8px', right: '8px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', color: theme.textMuted, opacity: 0.6 }} title="Delete this Q&A">✕</button>
