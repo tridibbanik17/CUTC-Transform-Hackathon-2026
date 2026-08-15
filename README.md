@@ -2,9 +2,9 @@
 
 A Chrome extension that turns your course materials into an AI tutor — upload lectures and exams, then ask questions and get answers with cited sources. Powered by your free Gemini API key. Zero cost.
 
-[![Demo Video](icons/coursechat-thumbnail-16-9.png)](https://youtu.be/eQ9ph6SMc0k)
+[![Demo Video](icons/coursechat-thumbnail-16-9.png)](https://youtu.be/3ZYDVrsDuRY?si=1XWbaEdmz7IW3V65)
 
-▶️ **[Watch the Demo](https://youtu.be/eQ9ph6SMc0k)**
+▶️ **[Watch the 1-Minute Demo](https://youtu.be/3ZYDVrsDuRY?si=1XWbaEdmz7IW3V65)**
 
 > 🚀 Coming soon to the Chrome Web Store as a published extension.
 
@@ -45,7 +45,7 @@ A Chrome extension that turns your course materials into an AI tutor — upload 
 
 | Feature | Description |
 |---------|-------------|
-| **Upload & index any course file** | 15+ formats: PDF, PPTX, DOCX, HTML, Jupyter notebooks, source code, and more |
+| **Upload & index any course file** | 15+ formats: PDF, PPTX, DOCX, HTML, Jupyter notebooks, source code, LaTeX, and more. Drag & drop supported. |
 | **Cited answers** | Every answer includes inline source references (file name, page number) |
 | **LaTeX math rendering** | Mathematical notation is converted to clean Unicode (2⁸, log₂, ×) |
 | **File preview** | Click any uploaded file tile to view its extracted text |
@@ -111,6 +111,8 @@ Chrome extensions can't efficiently store vector databases or run similarity sea
 | Plain text (.txt, .md) | Read as-is |
 | Source code (.py, .java, .js, .cpp, .css) | Read as-is |
 | CSV (.csv) | Read as-is |
+| LaTeX (.tex) | Read as-is |
+| MATLAB (.m) | Read as-is |
 
 ---
 
