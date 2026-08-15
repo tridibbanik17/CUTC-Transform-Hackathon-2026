@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "CourseChat - AI Study Tutor for Your Course Materials",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Upload your course materials, ask questions, get cited answers. AI study tutor powered by your free Gemini API key.",
   "permissions": [
     "storage",
@@ -35,11 +35,17 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["pdf-parser/index.html"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "pdf-parser/index.html"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "sandbox": {
-    "pages": ["pdf-parser/index.html"]
+    "pages": [
+      "pdf-parser/index.html"
+    ]
   }
 }
