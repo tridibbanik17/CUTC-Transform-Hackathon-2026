@@ -360,8 +360,8 @@ async function processQuery(courseId: string, query: string) {
   if (trimmed.length < 1) {
     return { type: 'ERROR', payload: { message: 'Please type a question.', code: 'INVALID_QUERY' } };
   }
-  if (trimmed.length > 500) {
-    return { type: 'ERROR', payload: { message: 'Query must be 500 characters or fewer.', code: 'QUERY_TOO_LONG' } };
+  if (trimmed.length > 2000) {
+    return { type: 'ERROR', payload: { message: 'Query must be 2000 characters or fewer.', code: 'QUERY_TOO_LONG' } };
   }
 
   // --- Primary path: ragEngine -> Backboard.io (retrieval + generation) ---
@@ -393,7 +393,34 @@ async function processQuery(courseId: string, query: string) {
 
   const context = await getCourseContext(courseId);
   if (!context) {
-    return { type: 'ERROR', payload: { message: 'Please upload at least one PDF or file first.', code: 'NO_INDEX' } };
+    // Fallback: try reconstructing from individual stored file texts
+    const filesResult = await chrome.storage.local.get('course_files_default-course');
+    const fileNames: string[] = filesResult['course_files_default-course'] || [];
+    if (fileNames.length === 0) {
+      return { type: 'ERROR', payload: { message: 'Please upload at least one PDF or file first.', code: 'NO_INDEX' } };
+    }
+    const keys = fileNames.map(f => `file_text_${f}`);
+    const texts = await chrome.storage.local.get(keys);
+    let rebuilt = '';
+    for (const f of fileNames) {
+      const text = texts[`file_text_${f}`] || '';
+      if (text) rebuilt += `\n\n[${f}]\n${text}`;
+    }
+    if (!rebuilt) {
+      return { type: 'ERROR', payload: { message: 'Please upload at least one PDF or file first.', code: 'NO_INDEX' } };
+    }
+    // Store it for next time
+    chrome.storage.local.set({ [`course_context_${courseId}`]: rebuilt }).catch(() => {});
+    const result = await directGeminiQuery(apiKey, trimmed, rebuilt, courseId);
+    return {
+      type: 'QUERY_RESPONSE',
+      payload: {
+        answer: result.answer,
+        citations: result.citations,
+        confidenceScore: result.status === 'success' ? 0.8 : 0.3,
+        status: result.status,
+      },
+    };
   }
 
   const result = await directGeminiQuery(apiKey, trimmed, context, courseId);
