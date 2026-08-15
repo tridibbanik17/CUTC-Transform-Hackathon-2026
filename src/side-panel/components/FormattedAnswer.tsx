@@ -82,10 +82,17 @@ function formatInline(text: string): React.ReactNode {
   // First convert any LaTeX to Unicode
   let processed = text;
   if (hasLatex(processed)) {
-    // Process each $...$ segment
-    processed = processed.replace(/\$([^$]+)\$/g, (_, math) => latexToUnicode(math));
-    // Also handle undelimited LaTeX commands
-    if (hasLatex(processed)) {
+    // Process each $...$ segment — only convert if content looks like math
+    processed = processed.replace(/\$([^$]+)\$/g, (match, math) => {
+      // Only treat as LaTeX if it contains math-like characters
+      if (/[\\^_{}]|\\[a-z]/.test(math) || /\btimes\b|\bfrac\b|\bsqrt\b/.test(math)) {
+        return latexToUnicode(math);
+      }
+      // Otherwise it might be a dollar amount or non-math — leave as-is but remove $ delimiters
+      return math;
+    });
+    // Also handle undelimited LaTeX commands (e.g. \times without $ wrapper)
+    if (/\\(?:times|text|frac|log|sqrt|sum|geq|leq|neq|approx|infty|pi)\b/.test(processed)) {
       processed = latexToUnicode(processed);
     }
   }
