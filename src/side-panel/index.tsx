@@ -881,13 +881,13 @@ function App() {
 
       {/* File Preview Modal */}
       {previewFile && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', flexDirection: 'column' }} onClick={() => setPreviewFile(null)}>
-          <div style={{ margin: '16px', flex: 1, display: 'flex', flexDirection: 'column', background: theme.background, borderRadius: '12px', overflow: 'hidden', border: `1px solid ${theme.border}` }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ padding: '12px 16px', borderBottom: `1px solid ${theme.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-              <span style={{ fontWeight: 600, fontSize: '13px', color: theme.text }}>📄 {previewFile.name}</span>
-              <button onClick={() => setPreviewFile(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: theme.textMuted, padding: '0 4px' }}>✕</button>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1000, display: 'flex', flexDirection: 'column', padding: '12px' }} onClick={() => setPreviewFile(null)}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: darkMode ? '#1a202c' : '#ffffff', borderRadius: '12px', overflow: 'hidden', border: `1px solid ${darkMode ? '#4a5568' : '#e2e8f0'}`, boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ padding: '12px 16px', borderBottom: `1px solid ${darkMode ? '#4a5568' : '#e2e8f0'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, background: darkMode ? '#2d3748' : '#f7fafc' }}>
+              <span style={{ fontWeight: 600, fontSize: '13px', color: darkMode ? '#e2e8f0' : '#1a202c' }}>📄 {previewFile.name}</span>
+              <button onClick={() => setPreviewFile(null)} style={{ background: darkMode ? '#4a5568' : '#edf2f7', border: 'none', cursor: 'pointer', fontSize: '14px', color: darkMode ? '#e2e8f0' : '#4a5568', padding: '4px 8px', borderRadius: '6px', fontWeight: 600 }}>✕ Close</button>
             </div>
-            <div style={{ flex: 1, overflow: 'auto', padding: '16px', fontSize: '12px', lineHeight: 1.6, color: theme.text, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'monospace' }}>
+            <div style={{ flex: 1, overflow: 'auto', padding: '16px', fontSize: '12px', lineHeight: 1.7, color: darkMode ? '#cbd5e0' : '#2d3748', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: "'Consolas', 'Monaco', monospace", background: darkMode ? '#1a202c' : '#ffffff' }}>
               {previewFile.text}
             </div>
           </div>
