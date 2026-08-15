@@ -212,7 +212,10 @@ function parsePdfInIframe(buffer: ArrayBuffer): Promise<string> {
     iframe.style.display = 'none';
     iframe.src = chrome.runtime.getURL('pdf-parser/index.html');
 
-    const timeout = setTimeout(() => { iframe.remove(); resolve(''); }, 30000);
+    // Scale timeout by file size: 30s base + 1s per MB
+    const sizeMB = buffer.byteLength / (1024 * 1024);
+    const timeoutMs = Math.max(30000, 30000 + sizeMB * 1000);
+    const timeout = setTimeout(() => { iframe.remove(); resolve(''); }, timeoutMs);
 
     function onMessage(e: MessageEvent) {
       if (e.data.type === 'pdf-ready') {
