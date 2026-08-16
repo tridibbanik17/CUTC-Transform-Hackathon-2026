@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "CourseChat - AI Study Tutor for Your Course Materials",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Upload your course materials, ask questions, get cited answers. AI study tutor powered by your free Gemini API key.",
   "permissions": [
     "storage",
