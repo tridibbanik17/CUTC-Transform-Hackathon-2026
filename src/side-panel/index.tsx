@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { extractPptxText, extractDocxText, extractDocText, extractOdtText } from '@/shared/binary-extractors';
 import { FormattedAnswer } from './components/FormattedAnswer';
@@ -241,12 +241,6 @@ function Spinner() {
 }
 
 // --- App ---
-const voiceTip = navigator.platform.includes('Mac') 
-  ? 'Fn Fn or Cmd+Control+Space (Mac)' 
-  : navigator.platform.includes('Linux') 
-    ? 'Super key or IBus (Linux)' 
-    : 'Win+H (Windows)';
-
 function App() {
   const [apiKey, setApiKey] = useState('');
   const [maskedKey, setMaskedKey] = useState<string | null>(null);
@@ -256,8 +250,6 @@ function App() {
   const [keyLoading, setKeyLoading] = useState(false);
   const [query, setQuery] = useState('');
   const [queryLoading, setQueryLoading] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const [speechSupported] = useState(false); // Removed: use OS voice typing instead
   const [answers, setAnswers] = useState<Array<{ query: string; answer: string; status: string; citations: any[] }>>([]);
   const [previewFile, setPreviewFile] = useState<{ name: string; text: string } | null>(null);
 
@@ -489,79 +481,6 @@ function App() {
     });
     const text = result[`file_text_${fileName}`] || '(No text extracted)';
     setPreviewFile({ name: fileName, text });
-  }
-
-  // Voice dictation — runs speech recognition on the active web page (has mic access)
-  function handleVoiceInput() {
-    if (isListening) {
-      setIsListening(false);
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs[0]?.id) {
-          chrome.tabs.sendMessage(tabs[0].id, { type: 'STOP_SPEECH' });
-        }
-      });
-      return;
-    }
-
-    setIsListening(true);
-    setIndexResult(null); // Clear any previous error message
-
-    // Ask the content script (which runs on the page) to start speech recognition
-    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
-      if (!tabs[0]?.id) { setIsListening(false); return; }
-      const tabId = tabs[0].id;
-      
-      // Try sending to content script; if not there, inject it first
-      try {
-        await chrome.tabs.sendMessage(tabId, { type: 'START_SPEECH' });
-      } catch {
-        // Content script not injected — inject it, wait, then try again
-        try {
-          await chrome.scripting.executeScript({ target: { tabId }, files: ['content-script.js'] });
-          await new Promise(r => setTimeout(r, 500));
-          await chrome.tabs.sendMessage(tabId, { type: 'START_SPEECH' });
-        } catch {
-          setIsListening(false);
-          setIndexResult('🎤 Voice input unavailable on this page. Try on your LMS page or use Win+H for Windows voice typing.');
-        }
-      }
-    });
-
-    // Listen for results relayed through the service worker
-    const listener = (message: any) => {
-      if (message.type === 'SPEECH_RESULT') {
-        // Append to existing text (don't overwrite)
-        setQuery((prev) => {
-          const base = prev.trim();
-          return base ? base + ' ' + message.text : message.text;
-        });
-        // Auto-expand textarea
-        setTimeout(() => {
-          const ta = document.querySelector('textarea') as HTMLTextAreaElement;
-          if (ta) { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 200) + 'px'; }
-        }, 50);
-        clearTimeout(speechTimeout);
-      } else if (message.type === 'SPEECH_END') {
-        setIsListening(false);
-        chrome.runtime.onMessage.removeListener(listener);
-        clearTimeout(speechTimeout);
-      } else if (message.type === 'SPEECH_ERROR') {
-        setIsListening(false);
-        chrome.runtime.onMessage.removeListener(listener);
-        clearTimeout(speechTimeout);
-        setIndexResult('🎤 Voice input unavailable on this page. Try on your LMS page or use Win+H for Windows voice typing.');
-      }
-    };
-    chrome.runtime.onMessage.addListener(listener);
-
-    // Timeout: if no response in 3s, show error (CSP likely blocked it)
-    const speechTimeout = setTimeout(() => {
-      if (isListening) {
-        setIsListening(false);
-        chrome.runtime.onMessage.removeListener(listener);
-        setIndexResult('🎤 Voice input unavailable on this page. Try on your LMS page or use Win+H for Windows voice typing.');
-      }
-    }, 3000);
   }
 
   async function handleQuery() {
@@ -868,17 +787,6 @@ function App() {
               <button onClick={handleQuery} disabled={queryLoading || query.trim().length < 1} style={{ padding: '10px 20px', background: queryLoading || query.trim().length < 1 ? (darkMode ? '#3a5070' : '#a0c4f0') : '#1a73e8', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', cursor: queryLoading ? 'wait' : 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
                 {queryLoading ? <><Spinner /> Thinking...</> : 'Ask'}
               </button>
-              {speechSupported && (
-                <button onClick={handleVoiceInput} style={{ padding: '6px', background: isListening ? '#d93025' : 'transparent', color: isListening ? '#fff' : theme.textMuted, border: `1.5px solid ${isListening ? '#d93025' : theme.border}`, borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', width: '36px', height: '36px', animation: isListening ? 'pulse 1.2s ease-in-out infinite' : 'none' }} title={isListening ? 'Stop listening' : 'Voice input'}>
-                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                    <rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor" />
-                    <path d="M6 11a6 6 0 0 0 12 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" fill="none" />
-                    <line x1="12" y1="17" x2="12" y2="21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                    <line x1="8.5" y1="21" x2="15.5" y2="21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                    {isListening && <line x1="3.5" y1="3.5" x2="20.5" y2="20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />}
-                  </svg>
-                </button>
-              )}
             </div>
             <span style={{ fontSize: '11px', color: theme.textMuted }}>{query.length}/2000</span>
           </div>
@@ -890,7 +798,7 @@ function App() {
           {showTips && (
             <div style={{ marginTop: '8px', padding: '10px 12px', background: darkMode ? '#1e2a3a' : '#f0f7ff', border: `1px solid ${darkMode ? '#2d4a6f' : '#bdd7f1'}`, borderRadius: '8px', fontSize: '11px', color: theme.textSecondary, lineHeight: 1.7 }}>
               <div style={{ fontWeight: 600, marginBottom: '6px', fontSize: '12px' }}>💡 Tips for using CourseChat</div>
-              <div>🎤 <strong>Voice typing:</strong> Click the text box, then press <strong>{voiceTip}</strong> to dictate your question</div>
+              <div>🎤 <strong>Voice typing:</strong> Click the text box, then press <strong>Win+H</strong> (Windows) or <strong>Cmd+Control+Space</strong> (Mac) to dictate your question</div>
               <div>⌨️ <strong>Keyboard shortcut:</strong> Set a shortcut at <span style={{ fontFamily: 'monospace', fontSize: '10px', background: darkMode ? '#2d3748' : '#e2e8f0', padding: '1px 4px', borderRadius: '3px' }}>chrome://extensions/shortcuts</span> (e.g. Alt+Shift+C)</div>
               <div>📄 <strong>File preview:</strong> Click any uploaded file tile to see the extracted text</div>
               <div>📋 <strong>Copy answers:</strong> Use the Copy button to paste well-formatted text into your notes</div>

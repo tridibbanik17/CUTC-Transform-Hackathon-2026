@@ -65,7 +65,7 @@ A Chrome extension that turns your course materials into an AI tutor — upload 
 - **Local text extraction** — PDF.js and format parsers pull text from documents client-side
 - **React side panel** — Query input, formatted answers, file management, settings
 - **API key management** — Gemini key stored securely in `chrome.storage.local`
-- **Platform adapters** — Detect LMS (Brightspace, Canvas) and extract course materials automatically
+- **Drag & drop upload** — Upload one or many files by clicking or dragging into the panel
 
 ### Backend (Backboard.io)
 

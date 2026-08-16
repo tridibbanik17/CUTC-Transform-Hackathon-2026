@@ -81,7 +81,5 @@ https://github.com/tridibbanik17/CUTC-Transform-Hackathon-2026
 |-----------|----------------|
 | `storage` | Store your API key, chat history, and extracted file text locally |
 | `unlimitedStorage` | Allow indexing large courses (textbooks, many files) without hitting Chrome's default 10MB cap |
-| `activeTab` | Detect the current page for future LMS auto-detection features |
-| `scripting` | Enable voice input and page interaction features |
 | `sidePanel` | Render the CourseChat interface in Chrome's side panel |
 | `offscreen` | Run PDF.js text extraction in a sandboxed context |

@@ -71,16 +71,8 @@ English
 |-----------|---------------|
 | `storage` | Stores the user's API key, chat history, uploaded file text, and UI preferences (dark mode) locally in the browser. No data is sent externally except as described in the privacy policy. |
 | `unlimitedStorage` | Allows students to index entire courses (multiple textbooks, 40+ lecture files) without hitting Chrome's default 10MB storage limit. All data remains local. |
-| `activeTab` | Used for future LMS auto-detection feature that will identify course pages on supported platforms (Brightspace, Canvas). Currently used minimally for voice input support. |
-| `scripting` | Required to inject content scripts for voice input functionality and future LMS page detection. |
 | `sidePanel` | The extension's primary UI renders in Chrome's native side panel, providing a study assistant alongside the user's current webpage. |
 | `offscreen` | Creates an offscreen document to run PDF.js text extraction in a sandboxed iframe, preventing interference with the active page. |
-
----
-
-## Host Permissions Justification
-
-`<all_urls>` — Required for the content script that enables voice input on any webpage, and for future LMS auto-detection that needs to read course page content from various university domains (each university has unique URLs).
 
 ---
 
