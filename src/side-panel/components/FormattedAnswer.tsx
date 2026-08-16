@@ -106,47 +106,87 @@ function formatInline(text: string): React.ReactNode {
   return processed;
 }
 
-export function FormattedAnswer({ text, onCitationClick }: { text: string; onCitationClick?: (citation: string) => void }) {
+export function FormattedAnswer({ text, onCitationClick, uploadedFiles }: { text: string; onCitationClick?: (citation: string) => void; uploadedFiles?: string[] }) {
   const lines = text.split('\n');
   const elements: React.ReactNode[] = [];
 
-  // Regex to match inline citations like (Document: `Chapter 2.pdf`, Page 23) or ('file.pdf', Page 5)
-  // Also matches patterns like (`Chapter 2.pdf`, Page 23) or (Chapter 2.pdf, Page 23)
-  const inlineCitationRegex = /(\(?(?:Document:?\s*)?[`']?[\w\-\.\s]+\.(?:pdf|pptx|docx|doc|odt|html|ipynb|txt|md)[`']?,?\s*[Pp]age\s*\d+\)?)/gi;
+  // Build a set of file base names for matching (case-insensitive)
+  const fileNames = (uploadedFiles || []).map(f => f.toLowerCase());
 
-  // Wraps inline citations in clickable spans
-  function renderWithClickableCitations(content: React.ReactNode, key: string): React.ReactNode {
-    if (!onCitationClick) return content;
+  // Check if a text contains a reference to any uploaded file
+  function containsFileReference(line: string): boolean {
+    if (!fileNames.length) return false;
+    const lower = line.toLowerCase();
+    return fileNames.some(f => {
+      const baseName = f.replace(/\.[^.]+$/, '').replace(/[_\-]/g, ' ');
+      // Match the full filename or the base name (without extension)
+      return lower.includes(f) || lower.includes(baseName);
+    });
+  }
 
-    // Only process string nodes
+  // Make file references within text clickable
+  function renderWithClickableFiles(content: React.ReactNode, key: string): React.ReactNode {
+    if (!onCitationClick || !uploadedFiles?.length) return content;
+
     if (typeof content === 'string') {
-      const parts = content.split(inlineCitationRegex);
-      if (parts.length <= 1) return content;
+      // Try to find and wrap file references in the string
+      let result: React.ReactNode[] = [];
+      let remaining = content;
+      let found = false;
 
-      return parts.map((part, idx) => {
-        if (!part) return null;
-        // Check if this part matches a citation pattern (has a file extension + page)
-        if (part.match(/\.(?:pdf|pptx|docx|doc|odt|html|ipynb|txt|md)/i) && part.match(/[Pp]age\s*\d+/)) {
-          return (
-            <span
-              key={`${key}-cit-${idx}`}
-              onClick={(e) => { e.stopPropagation(); onCitationClick(part); }}
-              style={{ color: '#1a73e8', cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted' }}
-              title="Click to view source"
-            >
-              {part}
-            </span>
-          );
+      for (const fileName of uploadedFiles) {
+        const lower = remaining.toLowerCase();
+        const fileNameLower = fileName.toLowerCase();
+        const baseName = fileName.replace(/\.[^.]+$/, '');
+        
+        // Try matching full filename, backtick-wrapped, or base name
+        const patterns = [
+          fileName,
+          `\`${fileName}\``,
+          `'${fileName}'`,
+          `[${fileName}]`,
+          baseName,
+          baseName.replace(/[_\-]/g, ' '),
+        ];
+
+        for (const pattern of patterns) {
+          const idx = lower.indexOf(pattern.toLowerCase());
+          if (idx >= 0) {
+            const before = remaining.slice(0, idx);
+            const match = remaining.slice(idx, idx + pattern.length);
+            const after = remaining.slice(idx + pattern.length);
+            
+            if (before) result.push(before);
+            result.push(
+              <span
+                key={`${key}-file-${idx}`}
+                onClick={(e) => { e.stopPropagation(); onCitationClick(remaining); }}
+                style={{ color: '#1a73e8', cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted' }}
+                title={`View ${fileName}`}
+              >
+                {match}
+              </span>
+            );
+            remaining = after;
+            found = true;
+            break;
+          }
         }
-        return <React.Fragment key={`${key}-t-${idx}`}>{part}</React.Fragment>;
-      }).filter(Boolean);
+        if (found) break;
+      }
+
+      if (found) {
+        if (remaining) result.push(remaining);
+        return result;
+      }
+      return content;
     }
 
     // If it's an array (from bold processing), process each string element
     if (Array.isArray(content)) {
       return content.map((item, idx) => {
         if (typeof item === 'string') {
-          return <React.Fragment key={`${key}-a-${idx}`}>{renderWithClickableCitations(item, `${key}-${idx}`)}</React.Fragment>;
+          return <React.Fragment key={`${key}-a-${idx}`}>{renderWithClickableFiles(item, `${key}-${idx}`)}</React.Fragment>;
         }
         return item;
       });
@@ -202,14 +242,12 @@ export function FormattedAnswer({ text, onCitationClick }: { text: string; onCit
       continue;
     }
 
-    // Source/citation line — matches various citation formats from Gemini
-    // Only make it clickable if it contains a file reference (extension or page number)
+    // Source/citation line — any line starting with Source/Document that references a file
     if (line.match(/^\s*\*{0,2}\(?Source[^:]*:/i)) {
-      const hasFileRef = line.match(/\.(?:pdf|pptx|docx|doc|odt|html|ipynb|txt|md)|[Pp]age\s*\d+/i);
-      if (hasFileRef && onCitationClick) {
+      const isClickable = containsFileReference(line);
+      if (isClickable && onCitationClick) {
         elements.push(renderCitation(line, i));
       } else {
-        // Just a "Sources:" label — render as styled text but not clickable
         elements.push(
           <div key={i} style={{ paddingLeft: '12px', fontSize: '11px', color: '#1a73e8', marginTop: '4px', marginBottom: '8px', fontStyle: 'italic' }}>
             {formatInline(line)}
@@ -219,9 +257,13 @@ export function FormattedAnswer({ text, onCitationClick }: { text: string; onCit
       continue;
     }
 
-    // Lines starting with "Document:" that contain a file reference — make clickable
-    if (line.match(/^\s*\*{0,2}\(?Document:/i) && line.match(/\.(?:pdf|pptx|docx|doc|odt|html|ipynb|txt|md)|[Pp]age\s*\d+/i)) {
-      elements.push(renderCitation(line, i));
+    // Lines starting with "Document:" — make clickable if they reference a file
+    if (line.match(/^\s*\*{0,2}\(?Document:/i)) {
+      if (containsFileReference(line) && onCitationClick) {
+        elements.push(renderCitation(line, i));
+      } else {
+        elements.push(<div key={i} style={{ marginBottom: '2px' }}>{formatInline(line)}</div>);
+      }
       continue;
     }
 
@@ -231,15 +273,20 @@ export function FormattedAnswer({ text, onCitationClick }: { text: string; onCit
       const indent = indentMatch ? indentMatch[1].length : 0;
       const isNested = indent >= 2;
       const bulletText = line.replace(/^\s*[\*\-]\s/, '');
-      const bulletContent = renderWithClickableCitations(formatInline(bulletText), `b${i}`);
+      const bulletContent = containsFileReference(bulletText)
+        ? renderWithClickableFiles(formatInline(bulletText), `b${i}`)
+        : formatInline(bulletText);
 
       // Check if the next line is an inline source citation
       const nextLine = i + 1 < lines.length ? lines[i + 1] : '';
-      if (nextLine.match(/^\s*\*?\(?Source:|^\s*\(\*Source:|^\s*\*\(Source:/i)) {
+      if (nextLine.match(/^\s*\*?\(?Source[^:]*:|^\s*\(\*Source/i)) {
         elements.push(
           <div key={i} style={{ paddingLeft: isNested ? '28px' : '12px', marginBottom: '8px' }}>
             <div>• {bulletContent}</div>
-            {renderCitation(nextLine, `${i}-cite`, { paddingLeft: '0', marginTop: '2px', marginBottom: '0' })}
+            {containsFileReference(nextLine)
+              ? renderCitation(nextLine, `${i}-cite`, { paddingLeft: '0', marginTop: '2px', marginBottom: '0' })
+              : <div key={`${i}-cite`} style={{ fontSize: '11px', color: '#1a73e8', marginTop: '2px', fontStyle: 'italic' }}>{formatInline(nextLine)}</div>
+            }
           </div>
         );
         i++; // skip the source line
@@ -253,21 +300,13 @@ export function FormattedAnswer({ text, onCitationClick }: { text: string; onCit
       continue;
     }
 
-    // Regular text — but check if it contains a citation-like reference
-    if (line.match(/\[.*\.(pdf|pptx|docx|doc).*[Pp]age\s*\d+\]/)) {
-      // Line contains an inline citation reference like [filename.pdf, Page 3]
-      const citStyle: React.CSSProperties = onCitationClick
-        ? { marginBottom: '2px', cursor: 'pointer' }
-        : { marginBottom: '2px' };
-      elements.push(
-        <div key={i} style={citStyle} onClick={onCitationClick ? () => onCitationClick(line) : undefined}>
-          {formatInline(line)}
-        </div>
-      );
+    // Regular text — make file references clickable if present
+    if (containsFileReference(line)) {
+      elements.push(<div key={i} style={{ marginBottom: '2px' }}>{renderWithClickableFiles(formatInline(line), `t${i}`)}</div>);
       continue;
     }
 
-    elements.push(<div key={i} style={{ marginBottom: '2px' }}>{renderWithClickableCitations(formatInline(line), `t${i}`)}</div>);
+    elements.push(<div key={i} style={{ marginBottom: '2px' }}>{formatInline(line)}</div>);
   }
 
   return <>{elements}</>;

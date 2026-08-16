@@ -897,11 +897,11 @@ function App() {
               <button onClick={() => { const updated = answers.filter((_, idx) => idx !== i); setAnswers(updated); persistHistory(updated); }} style={{ position: 'absolute' as const, top: '8px', right: '8px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', color: theme.textMuted, opacity: 0.6 }} title="Delete this Q&A">✕</button>
               <div style={{ fontSize: '13px', fontWeight: 600, color: theme.text, marginBottom: '8px', paddingRight: '20px' }}>Q: {a.query}</div>
               <div style={{ fontSize: '13px', lineHeight: 1.6, color: darkMode ? '#ccc' : '#333' }}>
-                {a.status === 'success' && <FormattedAnswer text={a.answer} onCitationClick={handleCitationClick} />}
+                {a.status === 'success' && <FormattedAnswer text={a.answer} onCitationClick={handleCitationClick} uploadedFiles={uploadedFiles} />}
                 {a.status === 'low_confidence' && (
                   <>
                     <span style={{ background: theme.warningBg, color: theme.warningText, padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 500 }}>Low confidence</span><br /><br />
-                    <FormattedAnswer text={a.answer} onCitationClick={handleCitationClick} />
+                    <FormattedAnswer text={a.answer} onCitationClick={handleCitationClick} uploadedFiles={uploadedFiles} />
                   </>
                 )}
                 {a.status === 'insufficient_information' && (
