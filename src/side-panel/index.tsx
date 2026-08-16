@@ -251,7 +251,7 @@ function App() {
   const [query, setQuery] = useState('');
   const [queryLoading, setQueryLoading] = useState(false);
   const [answers, setAnswers] = useState<Array<{ query: string; answer: string; status: string; citations: any[] }>>([]);
-  const [previewFile, setPreviewFile] = useState<{ name: string; text: string } | null>(null);
+  const [previewFile, setPreviewFile] = useState<{ name: string; text: string; scrollToPage?: number } | null>(null);
 
   // Persist chat history to chrome.storage.local
   function persistHistory(history: typeof answers) {
@@ -474,13 +474,32 @@ function App() {
     setIndexResult('Cleared. Upload new files to start fresh.');
   }
 
-  // Open file preview: loads stored text for the file
-  async function handlePreviewFile(fileName: string) {
+  // Open file preview: loads stored text for the file, optionally scrolling to a page
+  async function handlePreviewFile(fileName: string, page?: number) {
     const result = await new Promise<Record<string, string>>((resolve) => {
       chrome.storage.local.get(`file_text_${fileName}`, (r) => resolve(r as Record<string, string>));
     });
     const text = result[`file_text_${fileName}`] || '(No text extracted)';
-    setPreviewFile({ name: fileName, text });
+    setPreviewFile({ name: fileName, text, scrollToPage: page });
+  }
+
+  // Handle clicking a citation in an answer — opens file preview at the cited page
+  function handleCitationClick(citationText: string) {
+    // Try to extract file name and page number from citation text
+    // Common patterns: "filename.pdf, Page 3", "filename.pdf — p.5", "[filename.pdf, Page 3]"
+    const fileMatch = citationText.match(/[\w\-\.\s]+\.(pdf|pptx|docx|doc|odt|html|ipynb|txt|md|py|java|js|cpp|c|css|csv|m|tex)/i);
+    const pageMatch = citationText.match(/[Pp]age\s*(\d+)|p\.?\s*(\d+)/);
+
+    if (fileMatch) {
+      const fileName = fileMatch[0].trim();
+      const page = pageMatch ? parseInt(pageMatch[1] || pageMatch[2]) : undefined;
+
+      // Check if the file is in our uploaded files list
+      const matchedFile = uploadedFiles.find(f => f === fileName || f.includes(fileName) || fileName.includes(f.replace(/\.[^.]+$/, '')));
+      if (matchedFile) {
+        handlePreviewFile(matchedFile, page);
+      }
+    }
   }
 
   async function handleQuery() {
@@ -856,11 +875,11 @@ function App() {
               <button onClick={() => { const updated = answers.filter((_, idx) => idx !== i); setAnswers(updated); persistHistory(updated); }} style={{ position: 'absolute' as const, top: '8px', right: '8px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', color: theme.textMuted, opacity: 0.6 }} title="Delete this Q&A">✕</button>
               <div style={{ fontSize: '13px', fontWeight: 600, color: theme.text, marginBottom: '8px', paddingRight: '20px' }}>Q: {a.query}</div>
               <div style={{ fontSize: '13px', lineHeight: 1.6, color: darkMode ? '#ccc' : '#333' }}>
-                {a.status === 'success' && <FormattedAnswer text={a.answer} />}
+                {a.status === 'success' && <FormattedAnswer text={a.answer} onCitationClick={handleCitationClick} />}
                 {a.status === 'low_confidence' && (
                   <>
                     <span style={{ background: theme.warningBg, color: theme.warningText, padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 500 }}>Low confidence</span><br /><br />
-                    <FormattedAnswer text={a.answer} />
+                    <FormattedAnswer text={a.answer} onCitationClick={handleCitationClick} />
                   </>
                 )}
                 {a.status === 'insufficient_information' && (
@@ -894,10 +913,28 @@ function App() {
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1000, display: 'flex', flexDirection: 'column', padding: '12px' }} onClick={() => setPreviewFile(null)}>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: darkMode ? '#1a202c' : '#ffffff', borderRadius: '12px', overflow: 'hidden', border: `1px solid ${darkMode ? '#4a5568' : '#e2e8f0'}`, boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }} onClick={(e) => e.stopPropagation()}>
             <div style={{ padding: '12px 16px', borderBottom: `1px solid ${darkMode ? '#4a5568' : '#e2e8f0'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, background: darkMode ? '#2d3748' : '#f7fafc' }}>
-              <span style={{ fontWeight: 600, fontSize: '13px', color: darkMode ? '#e2e8f0' : '#1a202c' }}>📄 {previewFile.name}</span>
+              <span style={{ fontWeight: 600, fontSize: '13px', color: darkMode ? '#e2e8f0' : '#1a202c' }}>📄 {previewFile.name}{previewFile.scrollToPage ? ` — Page ${previewFile.scrollToPage}` : ''}</span>
               <button onClick={() => setPreviewFile(null)} style={{ background: darkMode ? '#4a5568' : '#edf2f7', border: 'none', cursor: 'pointer', fontSize: '14px', color: darkMode ? '#e2e8f0' : '#4a5568', padding: '4px 8px', borderRadius: '6px', fontWeight: 600 }}>✕ Close</button>
             </div>
-            <div style={{ flex: 1, overflow: 'auto', padding: '16px', fontSize: '12px', lineHeight: 1.7, color: darkMode ? '#cbd5e0' : '#2d3748', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: "'Consolas', 'Monaco', monospace", background: darkMode ? '#1a202c' : '#ffffff' }}>
+            <div
+              ref={(el) => {
+                if (el && previewFile.scrollToPage) {
+                  // Scroll to the [Page X] marker after the modal renders
+                  setTimeout(() => {
+                    const pageMarker = `[Page ${previewFile.scrollToPage}]`;
+                    const idx = previewFile.text.indexOf(pageMarker);
+                    if (idx >= 0) {
+                      // Calculate approximate scroll position based on character index
+                      const textBefore = previewFile.text.slice(0, idx);
+                      const linesBefore = textBefore.split('\n').length;
+                      const lineHeight = 20; // approximate px per line
+                      el.scrollTop = Math.max(0, linesBefore * lineHeight - 40);
+                    }
+                  }, 100);
+                }
+              }}
+              style={{ flex: 1, overflow: 'auto', padding: '16px', fontSize: '12px', lineHeight: 1.7, color: darkMode ? '#cbd5e0' : '#2d3748', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: "'Consolas', 'Monaco', monospace", background: darkMode ? '#1a202c' : '#ffffff' }}
+            >
               {previewFile.text}
             </div>
           </div>

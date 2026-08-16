@@ -106,9 +106,33 @@ function formatInline(text: string): React.ReactNode {
   return processed;
 }
 
-export function FormattedAnswer({ text }: { text: string }) {
+export function FormattedAnswer({ text, onCitationClick }: { text: string; onCitationClick?: (citation: string) => void }) {
   const lines = text.split('\n');
   const elements: React.ReactNode[] = [];
+
+  // Helper to render a citation line — clickable if onCitationClick is provided
+  function renderCitation(line: string, key: number | string, extraStyle?: React.CSSProperties) {
+    const style: React.CSSProperties = {
+      paddingLeft: '12px',
+      fontSize: '11px',
+      color: '#1a73e8',
+      marginTop: '4px',
+      marginBottom: '8px',
+      fontStyle: 'italic',
+      ...extraStyle,
+      ...(onCitationClick ? { cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted' as const } : {}),
+    };
+    return (
+      <div
+        key={key}
+        style={style}
+        onClick={onCitationClick ? () => onCitationClick(line) : undefined}
+        title={onCitationClick ? 'Click to view source' : undefined}
+      >
+        {formatInline(line)}
+      </div>
+    );
+  }
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -135,11 +159,13 @@ export function FormattedAnswer({ text }: { text: string }) {
 
     // Source/citation line
     if (line.match(/^\s*\*?\(?Source:|^\s*\(\*Source:|^\s*\*\(Source:/i)) {
-      elements.push(
-        <div key={i} style={{ paddingLeft: '12px', fontSize: '11px', color: '#1a73e8', marginTop: '4px', marginBottom: '8px', fontStyle: 'italic' }}>
-          {formatInline(line)}
-        </div>
-      );
+      elements.push(renderCitation(line, i));
+      continue;
+    }
+
+    // Also detect inline citations like "[filename.pdf, Page 3]" or "Document: `filename.pdf`"
+    if (line.match(/^\s*\*?\(?Document:|^\s*\[.*\.(pdf|pptx|docx|doc).*[Pp]age/i)) {
+      elements.push(renderCitation(line, i));
       continue;
     }
 
@@ -157,9 +183,7 @@ export function FormattedAnswer({ text }: { text: string }) {
         elements.push(
           <div key={i} style={{ paddingLeft: isNested ? '28px' : '12px', marginBottom: '8px' }}>
             <div>• {bulletContent}</div>
-            <div style={{ fontSize: '11px', color: '#1a73e8', marginTop: '2px', fontStyle: 'italic' }}>
-              {formatInline(nextLine)}
-            </div>
+            {renderCitation(nextLine, `${i}-cite`, { paddingLeft: '0', marginTop: '2px', marginBottom: '0' })}
           </div>
         );
         i++; // skip the source line
@@ -173,7 +197,20 @@ export function FormattedAnswer({ text }: { text: string }) {
       continue;
     }
 
-    // Regular text
+    // Regular text — but check if it contains a citation-like reference
+    if (line.match(/\[.*\.(pdf|pptx|docx|doc).*[Pp]age\s*\d+\]/)) {
+      // Line contains an inline citation reference like [filename.pdf, Page 3]
+      const citStyle: React.CSSProperties = onCitationClick
+        ? { marginBottom: '2px', cursor: 'pointer' }
+        : { marginBottom: '2px' };
+      elements.push(
+        <div key={i} style={citStyle} onClick={onCitationClick ? () => onCitationClick(line) : undefined}>
+          {formatInline(line)}
+        </div>
+      );
+      continue;
+    }
+
     elements.push(<div key={i} style={{ marginBottom: '2px' }}>{formatInline(line)}</div>);
   }
 
