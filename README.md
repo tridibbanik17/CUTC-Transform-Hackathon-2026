@@ -60,28 +60,83 @@ A Chrome extension that turns your course materials into an AI tutor — upload 
 
 ## Architecture
 
+### Data Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  USER UPLOADS FILES                                                 │
+│                                                                     │
+│  PDF/PPTX/DOCX/etc.                                                │
+│       │                                                             │
+│       ▼                                                             │
+│  ┌──────────────┐         ┌───────────────────────────────────┐    │
+│  │ Chrome Ext.  │         │         Backboard.io              │    │
+│  │              │         │                                   │    │
+│  │ PDF.js       │ text    │  ┌─────────┐    ┌─────────────┐  │    │
+│  │ extracts  ───────────────▶│ Chunker │───▶│ Embeddings  │  │    │
+│  │ text locally │         │  └─────────┘    │ (via Gemini)│  │    │
+│  │              │         │                 └──────┬──────┘  │    │
+│  │ Also stores  │         │                        │         │    │
+│  │ in chrome.   │         │                        ▼         │    │
+│  │ storage.local│         │              ┌──────────────┐    │    │
+│  └──────────────┘         │              │ Vector Store │    │    │
+│                           │              └──────────────┘    │    │
+│                           └───────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│  USER ASKS A QUESTION                                               │
+│                                                                     │
+│  "How many bits for logical address?"                               │
+│       │                                                             │
+│       ▼                                                             │
+│  ┌──────────────┐         ┌───────────────────────────────────┐    │
+│  │ Chrome Ext.  │ query   │         Backboard.io              │    │
+│  │              │────────▶│                                   │    │
+│  │              │         │  1. Vector search finds the 3-5   │    │
+│  │              │         │     most relevant chunks          │    │
+│  │              │         │                                   │    │
+│  │              │         │  2. Sends ONLY those chunks +     │    │
+│  │              │  cited  │     question to Gemini API        │    │
+│  │  Displays ◀────────────│     (using user's API key)        │    │
+│  │  answer with│  answer  │                                   │    │
+│  │  citations  │         │  3. Gemini generates cited answer  │    │
+│  └──────────────┘         └───────────────────────────────────┘    │
+│                                                                     │
+│  WITHOUT Backboard: sends ALL 240k chars to Gemini (expensive)      │
+│  WITH Backboard: sends only ~3k relevant chars (50-100x cheaper)    │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
 ### Browser (Chrome Extension)
 
 - **Local text extraction** — PDF.js and format parsers pull text from documents client-side
 - **React side panel** — Query input, formatted answers, file management, settings
 - **API key management** — Gemini key stored securely in `chrome.storage.local`
 - **Drag & drop upload** — Upload one or many files by clicking or dragging into the panel
+- **Fallback path** — If Backboard is unreachable, sends locally cached context directly to Gemini
 
 ### Backend (Backboard.io)
 
-Backboard.io is the RAG orchestration backend — all compute-intensive work stays server-side:
+Backboard.io is the RAG orchestration layer — it makes Gemini answers smarter and cheaper:
 
 - **Document chunking** — Splits extracted text into 200–1000 token chunks
 - **Embedding generation** — Calls Gemini API with the user's key to create vectors
 - **Vector storage** — Persists embeddings + metadata across sessions
-- **Semantic search** — Cosine similarity to find relevant chunks for a query
-- **Answer generation** — Calls Gemini with retrieved context to produce cited answers
+- **Semantic search** — Cosine similarity to find the 3-5 most relevant chunks per query
+- **Answer generation** — Sends only relevant chunks + question to Gemini, producing cited answers
 
 The user's Gemini API key is passed through to Backboard.io, which makes Gemini calls on their behalf — resulting in **$0 server-side compute cost**.
 
-### Why this split?
+### Why Backboard instead of sending everything to Gemini?
 
-Chrome extensions can't efficiently store vector databases or run similarity search at scale. By offloading RAG to Backboard.io, the extension stays under 5MB, avoids IndexedDB performance issues, and gets cross-session persistence for free.
+| Without Backboard | With Backboard |
+|---|---|
+| Sends ALL course text (240k+ chars) to Gemini per question | Sends only ~3k relevant chars per question |
+| Burns through free API quota in 10-20 questions | Hundreds of questions within free tier |
+| Hits Gemini's context window limit on large courses | Never hits limits — chunks are small |
+| Worse answers (model drowns in irrelevant content) | Better answers (model sees only relevant material) |
+| No persistence — re-upload every session | Indexed once, persists across sessions |
 
 ---
 
