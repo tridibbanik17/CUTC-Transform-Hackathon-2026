@@ -111,7 +111,8 @@ export function FormattedAnswer({ text, onCitationClick }: { text: string; onCit
   const elements: React.ReactNode[] = [];
 
   // Regex to match inline citations like (Document: `Chapter 2.pdf`, Page 23) or (Document: 'file.pdf', Page 5)
-  const inlineCitationRegex = /(\(Document:?\s*[`']?[\w\-\.\s]+\.(pdf|pptx|docx|doc|odt|html|ipynb|txt|md)[`']?,?\s*[Pp]age\s*\d+\))/gi;
+  // Use a non-capturing group for the extension so split doesn't produce extra fragments
+  const inlineCitationRegex = /(\(Document:?\s*[`']?[\w\-\.\s]+\.(?:pdf|pptx|docx|doc|odt|html|ipynb|txt|md)[`']?,?\s*[Pp]age\s*\d+\))/gi;
 
   // Wraps inline citations in clickable spans
   function renderWithClickableCitations(content: React.ReactNode, key: string): React.ReactNode {
@@ -123,9 +124,9 @@ export function FormattedAnswer({ text, onCitationClick }: { text: string; onCit
       if (parts.length <= 1) return content;
 
       return parts.map((part, idx) => {
-        // Every match group produces: [before, fullMatch, extension, after...]
-        // The full citation matches on odd-ish indices — check if it looks like a citation
-        if (part && part.match(/^\(Document/i)) {
+        if (!part) return null;
+        // Check if this part matches the citation pattern
+        if (part.match(/^\(Document/i)) {
           return (
             <span
               key={`${key}-cit-${idx}`}
@@ -137,7 +138,7 @@ export function FormattedAnswer({ text, onCitationClick }: { text: string; onCit
             </span>
           );
         }
-        return part || null;
+        return <React.Fragment key={`${key}-t-${idx}`}>{part}</React.Fragment>;
       }).filter(Boolean);
     }
 
@@ -145,7 +146,7 @@ export function FormattedAnswer({ text, onCitationClick }: { text: string; onCit
     if (Array.isArray(content)) {
       return content.map((item, idx) => {
         if (typeof item === 'string') {
-          return renderWithClickableCitations(item, `${key}-${idx}`);
+          return <React.Fragment key={`${key}-a-${idx}`}>{renderWithClickableCitations(item, `${key}-${idx}`)}</React.Fragment>;
         }
         return item;
       });
