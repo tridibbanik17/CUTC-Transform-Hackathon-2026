@@ -485,38 +485,25 @@ function App() {
 
   // Handle clicking a citation in an answer — opens file preview at the cited page
   function handleCitationClick(citationText: string) {
-    // Try to extract file name and page number from citation text
-    // Patterns: "Document: `Chapter 2.pdf`, Page 23", "filename.pdf, Page 3", 
-    // "*Source: Winter 2025 Midterm SFWRENG 3SH3, Question 10 (Page 3).*"
-    const fileMatch = citationText.match(/[`']?([\w\-\.\s]+\.(?:pdf|pptx|docx|doc|odt|html|ipynb|txt|md|py|java|js|cpp|c|css|csv|m|tex))[`']?/i);
+    // Extract page number first (works regardless of file name format)
     const pageMatch = citationText.match(/[Pp]ages?\s*(\d+)|p\.?\s*(\d+)/);
     const page = pageMatch ? parseInt(pageMatch[1] || pageMatch[2]) : undefined;
 
-    if (fileMatch) {
-      const fileName = fileMatch[1].trim();
-      // Check if the file is in our uploaded files list (exact match or partial)
-      const matchedFile = uploadedFiles.find(f =>
-        f === fileName ||
-        f.toLowerCase() === fileName.toLowerCase() ||
-        f.includes(fileName) ||
-        fileName.includes(f.replace(/\.[^.]+$/, ''))
-      );
-      if (matchedFile) {
-        handlePreviewFile(matchedFile, page);
-        return;
-      }
-    }
-
-    // Fallback: if no extension-based match, try matching citation text against uploaded file names
-    // This handles cases like "*Source: Winter 2025 Midterm SFWRENG 3SH3, Question 10 (Page 3).*"
-    const cleanedCitation = citationText.replace(/[*`_\[\]()]/g, '').toLowerCase();
+    // Try to match against our actual uploaded file names (case-insensitive)
+    const lower = citationText.toLowerCase();
     const matchedFile = uploadedFiles.find(f => {
-      // Strip extension and underscores/dashes from file name for fuzzy matching
+      const fLower = f.toLowerCase();
+      // Direct match of the full filename
+      if (lower.includes(fLower)) return true;
+      // Match without extension if base name is long enough
       const baseName = f.replace(/\.[^.]+$/, '').replace(/[_\-]/g, ' ').toLowerCase();
-      // Check if the citation contains significant parts of the file name
-      const words = baseName.split(/\s+/).filter(w => w.length > 3);
-      const matchCount = words.filter(w => cleanedCitation.includes(w)).length;
-      return matchCount >= 2 && matchCount >= words.length * 0.4;
+      if (baseName.length >= 5 && lower.includes(baseName)) return true;
+      // For short names, require word boundary
+      if (baseName.length < 5) {
+        const escaped = baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return new RegExp(`(?:^|[^a-z0-9])${escaped}(?:[^a-z0-9]|$)`, 'i').test(lower);
+      }
+      return false;
     });
 
     if (matchedFile) {

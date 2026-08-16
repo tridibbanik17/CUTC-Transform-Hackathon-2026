@@ -114,13 +114,21 @@ export function FormattedAnswer({ text, onCitationClick, uploadedFiles }: { text
   const fileNames = (uploadedFiles || []).map(f => f.toLowerCase());
 
   // Check if a text contains a reference to any uploaded file
+  // Uses word boundary matching to avoid partial matches (e.g. "proc" in "processes")
   function containsFileReference(line: string): boolean {
     if (!fileNames.length) return false;
     const lower = line.toLowerCase();
     return fileNames.some(f => {
+      // Match the full filename (with or without backticks/quotes)
+      if (lower.includes(f)) return true;
+      // Match base name only if it's at least 5 chars (to avoid short names matching inside words)
       const baseName = f.replace(/\.[^.]+$/, '').replace(/[_\-]/g, ' ');
-      // Match the full filename or the base name (without extension)
-      return lower.includes(f) || lower.includes(baseName);
+      if (baseName.length < 5) {
+        // For short file names, require exact word match (surrounded by non-alphanumeric)
+        const escaped = baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return new RegExp(`(?:^|[^a-z0-9])${escaped}(?:[^a-z0-9]|$)`, 'i').test(lower);
+      }
+      return lower.includes(baseName);
     });
   }
 
@@ -129,7 +137,6 @@ export function FormattedAnswer({ text, onCitationClick, uploadedFiles }: { text
     if (!onCitationClick || !uploadedFiles?.length) return content;
 
     if (typeof content === 'string') {
-      // Try to find and wrap file references in the string
       let result: React.ReactNode[] = [];
       let remaining = content;
       let found = false;
@@ -139,19 +146,29 @@ export function FormattedAnswer({ text, onCitationClick, uploadedFiles }: { text
         const fileNameLower = fileName.toLowerCase();
         const baseName = fileName.replace(/\.[^.]+$/, '');
         
-        // Try matching full filename, backtick-wrapped, or base name
+        // Try matching: full filename, backtick/quote-wrapped, with various cases
         const patterns = [
-          fileName,
-          `\`${fileName}\``,
-          `'${fileName}'`,
-          `[${fileName}]`,
-          baseName,
-          baseName.replace(/[_\-]/g, ' '),
+          fileNameLower,
+          `\`${fileNameLower}\``,
+          `'${fileNameLower}'`,
+          `[${fileNameLower}]`,
         ];
+        // Only add base name if it's long enough to avoid false matches
+        if (baseName.length >= 5) {
+          patterns.push(baseName.toLowerCase());
+          patterns.push(baseName.replace(/[_\-]/g, ' ').toLowerCase());
+        }
 
         for (const pattern of patterns) {
-          const idx = lower.indexOf(pattern.toLowerCase());
+          const idx = lower.indexOf(pattern);
           if (idx >= 0) {
+            // For short patterns, verify word boundary
+            if (pattern.length < 5) {
+              const charBefore = idx > 0 ? lower[idx - 1] : ' ';
+              const charAfter = idx + pattern.length < lower.length ? lower[idx + pattern.length] : ' ';
+              if (/[a-z0-9]/.test(charBefore) || /[a-z0-9]/.test(charAfter)) continue;
+            }
+
             const before = remaining.slice(0, idx);
             const match = remaining.slice(idx, idx + pattern.length);
             const after = remaining.slice(idx + pattern.length);
