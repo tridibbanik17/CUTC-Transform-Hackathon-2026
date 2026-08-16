@@ -1,6 +1,6 @@
 {
   "name": "coursechat",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "Chrome extension that turns your LMS course page into an AI tutor",
   "private": true,
   "type": "module",
