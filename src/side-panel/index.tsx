@@ -486,16 +486,21 @@ function App() {
   // Handle clicking a citation in an answer — opens file preview at the cited page
   function handleCitationClick(citationText: string) {
     // Try to extract file name and page number from citation text
-    // Common patterns: "filename.pdf, Page 3", "filename.pdf — p.5", "[filename.pdf, Page 3]"
-    const fileMatch = citationText.match(/[\w\-\.\s]+\.(pdf|pptx|docx|doc|odt|html|ipynb|txt|md|py|java|js|cpp|c|css|csv|m|tex)/i);
+    // Patterns: "Document: `Chapter 2.pdf`, Page 23", "filename.pdf, Page 3", "[filename.pdf, Page 3]"
+    const fileMatch = citationText.match(/[`']?([\w\-\.\s]+\.(pdf|pptx|docx|doc|odt|html|ipynb|txt|md|py|java|js|cpp|c|css|csv|m|tex))[`']?/i);
     const pageMatch = citationText.match(/[Pp]age\s*(\d+)|p\.?\s*(\d+)/);
 
     if (fileMatch) {
-      const fileName = fileMatch[0].trim();
+      const fileName = fileMatch[1].trim();
       const page = pageMatch ? parseInt(pageMatch[1] || pageMatch[2]) : undefined;
 
-      // Check if the file is in our uploaded files list
-      const matchedFile = uploadedFiles.find(f => f === fileName || f.includes(fileName) || fileName.includes(f.replace(/\.[^.]+$/, '')));
+      // Check if the file is in our uploaded files list (exact match or partial)
+      const matchedFile = uploadedFiles.find(f =>
+        f === fileName ||
+        f.toLowerCase() === fileName.toLowerCase() ||
+        f.includes(fileName) ||
+        fileName.includes(f.replace(/\.[^.]+$/, ''))
+      );
       if (matchedFile) {
         handlePreviewFile(matchedFile, page);
       }

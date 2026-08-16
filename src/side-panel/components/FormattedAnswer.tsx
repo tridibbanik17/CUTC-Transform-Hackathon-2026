@@ -110,6 +110,50 @@ export function FormattedAnswer({ text, onCitationClick }: { text: string; onCit
   const lines = text.split('\n');
   const elements: React.ReactNode[] = [];
 
+  // Regex to match inline citations like (Document: `Chapter 2.pdf`, Page 23) or (Document: 'file.pdf', Page 5)
+  const inlineCitationRegex = /(\(Document:?\s*[`']?[\w\-\.\s]+\.(pdf|pptx|docx|doc|odt|html|ipynb|txt|md)[`']?,?\s*[Pp]age\s*\d+\))/gi;
+
+  // Wraps inline citations in clickable spans
+  function renderWithClickableCitations(content: React.ReactNode, key: string): React.ReactNode {
+    if (!onCitationClick) return content;
+
+    // Only process string nodes
+    if (typeof content === 'string') {
+      const parts = content.split(inlineCitationRegex);
+      if (parts.length <= 1) return content;
+
+      return parts.map((part, idx) => {
+        // Every match group produces: [before, fullMatch, extension, after...]
+        // The full citation matches on odd-ish indices — check if it looks like a citation
+        if (part && part.match(/^\(Document/i)) {
+          return (
+            <span
+              key={`${key}-cit-${idx}`}
+              onClick={(e) => { e.stopPropagation(); onCitationClick(part); }}
+              style={{ color: '#1a73e8', cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted' }}
+              title="Click to view source"
+            >
+              {part}
+            </span>
+          );
+        }
+        return part || null;
+      }).filter(Boolean);
+    }
+
+    // If it's an array (from bold processing), process each string element
+    if (Array.isArray(content)) {
+      return content.map((item, idx) => {
+        if (typeof item === 'string') {
+          return renderWithClickableCitations(item, `${key}-${idx}`);
+        }
+        return item;
+      });
+    }
+
+    return content;
+  }
+
   // Helper to render a citation line — clickable if onCitationClick is provided
   function renderCitation(line: string, key: number | string, extraStyle?: React.CSSProperties) {
     const style: React.CSSProperties = {
@@ -175,7 +219,7 @@ export function FormattedAnswer({ text, onCitationClick }: { text: string; onCit
       const indent = indentMatch ? indentMatch[1].length : 0;
       const isNested = indent >= 2;
       const bulletText = line.replace(/^\s*[\*\-]\s/, '');
-      const bulletContent = formatInline(bulletText);
+      const bulletContent = renderWithClickableCitations(formatInline(bulletText), `b${i}`);
 
       // Check if the next line is an inline source citation
       const nextLine = i + 1 < lines.length ? lines[i + 1] : '';
@@ -211,7 +255,7 @@ export function FormattedAnswer({ text, onCitationClick }: { text: string; onCit
       continue;
     }
 
-    elements.push(<div key={i} style={{ marginBottom: '2px' }}>{formatInline(line)}</div>);
+    elements.push(<div key={i} style={{ marginBottom: '2px' }}>{renderWithClickableCitations(formatInline(line), `t${i}`)}</div>);
   }
 
   return <>{elements}</>;
