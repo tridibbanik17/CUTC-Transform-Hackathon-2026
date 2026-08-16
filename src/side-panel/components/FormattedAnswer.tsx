@@ -106,135 +106,9 @@ function formatInline(text: string): React.ReactNode {
   return processed;
 }
 
-export function FormattedAnswer({ text, onCitationClick, uploadedFiles }: { text: string; onCitationClick?: (citation: string) => void; uploadedFiles?: string[] }) {
+export function FormattedAnswer({ text }: { text: string }) {
   const lines = text.split('\n');
   const elements: React.ReactNode[] = [];
-
-  // Build a set of file base names for matching (case-insensitive)
-  const fileNames = (uploadedFiles || []).map(f => f.toLowerCase());
-
-  // Check if a text contains a reference to any uploaded file
-  // Uses word boundary matching to avoid partial matches (e.g. "proc" in "processes")
-  function containsFileReference(line: string): boolean {
-    if (!fileNames.length) return false;
-    const lower = line.toLowerCase();
-    return fileNames.some(f => {
-      // Match the full filename (with or without backticks/quotes)
-      if (lower.includes(f)) return true;
-      // Match base name only if it's at least 5 chars (to avoid short names matching inside words)
-      const baseName = f.replace(/\.[^.]+$/, '').replace(/[_\-]/g, ' ');
-      if (baseName.length < 5) {
-        // For short file names, require exact word match (surrounded by non-alphanumeric)
-        const escaped = baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        return new RegExp(`(?:^|[^a-z0-9])${escaped}(?:[^a-z0-9]|$)`, 'i').test(lower);
-      }
-      return lower.includes(baseName);
-    });
-  }
-
-  // Make file references within text clickable
-  function renderWithClickableFiles(content: React.ReactNode, key: string): React.ReactNode {
-    if (!onCitationClick || !uploadedFiles?.length) return content;
-
-    if (typeof content === 'string') {
-      let result: React.ReactNode[] = [];
-      let remaining = content;
-      let found = false;
-
-      for (const fileName of uploadedFiles) {
-        const lower = remaining.toLowerCase();
-        const fileNameLower = fileName.toLowerCase();
-        const baseName = fileName.replace(/\.[^.]+$/, '');
-        
-        // Try matching: full filename, backtick/quote-wrapped, with various cases
-        const patterns = [
-          fileNameLower,
-          `\`${fileNameLower}\``,
-          `'${fileNameLower}'`,
-          `[${fileNameLower}]`,
-        ];
-        // Only add base name if it's long enough to avoid false matches
-        if (baseName.length >= 5) {
-          patterns.push(baseName.toLowerCase());
-          patterns.push(baseName.replace(/[_\-]/g, ' ').toLowerCase());
-        }
-
-        for (const pattern of patterns) {
-          const idx = lower.indexOf(pattern);
-          if (idx >= 0) {
-            // For short patterns, verify word boundary
-            if (pattern.length < 5) {
-              const charBefore = idx > 0 ? lower[idx - 1] : ' ';
-              const charAfter = idx + pattern.length < lower.length ? lower[idx + pattern.length] : ' ';
-              if (/[a-z0-9]/.test(charBefore) || /[a-z0-9]/.test(charAfter)) continue;
-            }
-
-            const before = remaining.slice(0, idx);
-            const match = remaining.slice(idx, idx + pattern.length);
-            const after = remaining.slice(idx + pattern.length);
-            
-            if (before) result.push(before);
-            result.push(
-              <span
-                key={`${key}-file-${idx}`}
-                onClick={(e) => { e.stopPropagation(); onCitationClick(remaining); }}
-                style={{ color: '#1a73e8', cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted' }}
-                title={`View ${fileName}`}
-              >
-                {match}
-              </span>
-            );
-            remaining = after;
-            found = true;
-            break;
-          }
-        }
-        if (found) break;
-      }
-
-      if (found) {
-        if (remaining) result.push(remaining);
-        return result;
-      }
-      return content;
-    }
-
-    // If it's an array (from bold processing), process each string element
-    if (Array.isArray(content)) {
-      return content.map((item, idx) => {
-        if (typeof item === 'string') {
-          return <React.Fragment key={`${key}-a-${idx}`}>{renderWithClickableFiles(item, `${key}-${idx}`)}</React.Fragment>;
-        }
-        return item;
-      });
-    }
-
-    return content;
-  }
-
-  // Helper to render a citation line — clickable if onCitationClick is provided
-  function renderCitation(line: string, key: number | string, extraStyle?: React.CSSProperties) {
-    const style: React.CSSProperties = {
-      paddingLeft: '12px',
-      fontSize: '11px',
-      color: '#1a73e8',
-      marginTop: '4px',
-      marginBottom: '8px',
-      fontStyle: 'italic',
-      ...extraStyle,
-      ...(onCitationClick ? { cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted' as const } : {}),
-    };
-    return (
-      <div
-        key={key}
-        style={style}
-        onClick={onCitationClick ? () => onCitationClick(line) : undefined}
-        title={onCitationClick ? 'Click to view source' : undefined}
-      >
-        {formatInline(line)}
-      </div>
-    );
-  }
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -259,28 +133,13 @@ export function FormattedAnswer({ text, onCitationClick, uploadedFiles }: { text
       continue;
     }
 
-    // Source/citation line — any line starting with Source/Document that references a file
-    if (line.match(/^\s*\*{0,2}\(?Source[^:]*:/i)) {
-      const isClickable = containsFileReference(line);
-      if (isClickable && onCitationClick) {
-        elements.push(renderCitation(line, i));
-      } else {
-        elements.push(
-          <div key={i} style={{ paddingLeft: '12px', fontSize: '11px', color: '#1a73e8', marginTop: '4px', marginBottom: '8px', fontStyle: 'italic' }}>
-            {formatInline(line)}
-          </div>
-        );
-      }
-      continue;
-    }
-
-    // Lines starting with "Document:" — make clickable if they reference a file
-    if (line.match(/^\s*\*{0,2}\(?Document:/i)) {
-      if (containsFileReference(line) && onCitationClick) {
-        elements.push(renderCitation(line, i));
-      } else {
-        elements.push(<div key={i} style={{ marginBottom: '2px' }}>{formatInline(line)}</div>);
-      }
+    // Source/citation line
+    if (line.match(/^\s*\*?\(?Source[^:]*:|^\s*\(\*Source/i)) {
+      elements.push(
+        <div key={i} style={{ paddingLeft: '12px', fontSize: '11px', color: '#1a73e8', marginTop: '4px', marginBottom: '8px', fontStyle: 'italic' }}>
+          {formatInline(line)}
+        </div>
+      );
       continue;
     }
 
@@ -290,9 +149,7 @@ export function FormattedAnswer({ text, onCitationClick, uploadedFiles }: { text
       const indent = indentMatch ? indentMatch[1].length : 0;
       const isNested = indent >= 2;
       const bulletText = line.replace(/^\s*[\*\-]\s/, '');
-      const bulletContent = containsFileReference(bulletText)
-        ? renderWithClickableFiles(formatInline(bulletText), `b${i}`)
-        : formatInline(bulletText);
+      const bulletContent = formatInline(bulletText);
 
       // Check if the next line is an inline source citation
       const nextLine = i + 1 < lines.length ? lines[i + 1] : '';
@@ -300,10 +157,9 @@ export function FormattedAnswer({ text, onCitationClick, uploadedFiles }: { text
         elements.push(
           <div key={i} style={{ paddingLeft: isNested ? '28px' : '12px', marginBottom: '8px' }}>
             <div>• {bulletContent}</div>
-            {containsFileReference(nextLine)
-              ? renderCitation(nextLine, `${i}-cite`, { paddingLeft: '0', marginTop: '2px', marginBottom: '0' })
-              : <div key={`${i}-cite`} style={{ fontSize: '11px', color: '#1a73e8', marginTop: '2px', fontStyle: 'italic' }}>{formatInline(nextLine)}</div>
-            }
+            <div style={{ fontSize: '11px', color: '#1a73e8', marginTop: '2px', fontStyle: 'italic' }}>
+              {formatInline(nextLine)}
+            </div>
           </div>
         );
         i++; // skip the source line
@@ -317,12 +173,7 @@ export function FormattedAnswer({ text, onCitationClick, uploadedFiles }: { text
       continue;
     }
 
-    // Regular text — make file references clickable if present
-    if (containsFileReference(line)) {
-      elements.push(<div key={i} style={{ marginBottom: '2px' }}>{renderWithClickableFiles(formatInline(line), `t${i}`)}</div>);
-      continue;
-    }
-
+    // Regular text
     elements.push(<div key={i} style={{ marginBottom: '2px' }}>{formatInline(line)}</div>);
   }
 
