@@ -203,14 +203,24 @@ export function FormattedAnswer({ text, onCitationClick }: { text: string; onCit
     }
 
     // Source/citation line — matches various citation formats from Gemini
-    // "Source:", "*Source:", "Source Document:", "**Source Document:**", etc.
-    if (line.match(/^\s*\*{0,2}\(?Source[^:]*:|^\s*\(\*Source/i)) {
-      elements.push(renderCitation(line, i));
+    // Only make it clickable if it contains a file reference (extension or page number)
+    if (line.match(/^\s*\*{0,2}\(?Source[^:]*:/i)) {
+      const hasFileRef = line.match(/\.(?:pdf|pptx|docx|doc|odt|html|ipynb|txt|md)|[Pp]age\s*\d+/i);
+      if (hasFileRef && onCitationClick) {
+        elements.push(renderCitation(line, i));
+      } else {
+        // Just a "Sources:" label — render as styled text but not clickable
+        elements.push(
+          <div key={i} style={{ paddingLeft: '12px', fontSize: '11px', color: '#1a73e8', marginTop: '4px', marginBottom: '8px', fontStyle: 'italic' }}>
+            {formatInline(line)}
+          </div>
+        );
+      }
       continue;
     }
 
-    // Also detect lines with "Document:" or lines that are primarily a file reference with page
-    if (line.match(/^\s*\*{0,2}\(?Document:|^\s*\[.*\.(?:pdf|pptx|docx|doc).*[Pp]age/i)) {
+    // Lines starting with "Document:" that contain a file reference — make clickable
+    if (line.match(/^\s*\*{0,2}\(?Document:/i) && line.match(/\.(?:pdf|pptx|docx|doc|odt|html|ipynb|txt|md)|[Pp]age\s*\d+/i)) {
       elements.push(renderCitation(line, i));
       continue;
     }
