@@ -489,7 +489,7 @@ function App() {
     // Patterns: "Document: `Chapter 2.pdf`, Page 23", "filename.pdf, Page 3", 
     // "*Source: Winter 2025 Midterm SFWRENG 3SH3, Question 10 (Page 3).*"
     const fileMatch = citationText.match(/[`']?([\w\-\.\s]+\.(?:pdf|pptx|docx|doc|odt|html|ipynb|txt|md|py|java|js|cpp|c|css|csv|m|tex))[`']?/i);
-    const pageMatch = citationText.match(/[Pp]age\s*(\d+)|p\.?\s*(\d+)/);
+    const pageMatch = citationText.match(/[Pp]ages?\s*(\d+)|p\.?\s*(\d+)/);
     const page = pageMatch ? parseInt(pageMatch[1] || pageMatch[2]) : undefined;
 
     if (fileMatch) {
@@ -944,15 +944,17 @@ function App() {
                   // Scroll to the [Page X] marker after the modal renders
                   setTimeout(() => {
                     const pageMarker = `[Page ${previewFile.scrollToPage}]`;
-                    const idx = previewFile.text.indexOf(pageMarker);
+                    const text = previewFile.text;
+                    const idx = text.indexOf(pageMarker);
                     if (idx >= 0) {
-                      // Calculate approximate scroll position based on character index
-                      const textBefore = previewFile.text.slice(0, idx);
+                      // Calculate scroll position: count newlines before the marker
+                      const textBefore = text.slice(0, idx);
                       const linesBefore = textBefore.split('\n').length;
-                      const lineHeight = 20; // approximate px per line
-                      el.scrollTop = Math.max(0, linesBefore * lineHeight - 40);
+                      // Each line is roughly 20px (12px font * 1.7 line-height)
+                      const approxPx = linesBefore * 20;
+                      el.scrollTop = Math.max(0, approxPx - 50);
                     }
-                  }, 100);
+                  }, 150);
                 }
               }}
               style={{ flex: 1, overflow: 'auto', padding: '16px', fontSize: '12px', lineHeight: 1.7, color: darkMode ? '#cbd5e0' : '#2d3748', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: "'Consolas', 'Monaco', monospace", background: darkMode ? '#1a202c' : '#ffffff' }}
