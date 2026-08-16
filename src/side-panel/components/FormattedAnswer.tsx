@@ -110,9 +110,9 @@ export function FormattedAnswer({ text, onCitationClick }: { text: string; onCit
   const lines = text.split('\n');
   const elements: React.ReactNode[] = [];
 
-  // Regex to match inline citations like (Document: `Chapter 2.pdf`, Page 23) or (Document: 'file.pdf', Page 5)
-  // Use a non-capturing group for the extension so split doesn't produce extra fragments
-  const inlineCitationRegex = /(\(Document:?\s*[`']?[\w\-\.\s]+\.(?:pdf|pptx|docx|doc|odt|html|ipynb|txt|md)[`']?,?\s*[Pp]age\s*\d+\))/gi;
+  // Regex to match inline citations like (Document: `Chapter 2.pdf`, Page 23) or ('file.pdf', Page 5)
+  // Also matches patterns like (`Chapter 2.pdf`, Page 23) or (Chapter 2.pdf, Page 23)
+  const inlineCitationRegex = /(\(?(?:Document:?\s*)?[`']?[\w\-\.\s]+\.(?:pdf|pptx|docx|doc|odt|html|ipynb|txt|md)[`']?,?\s*[Pp]age\s*\d+\)?)/gi;
 
   // Wraps inline citations in clickable spans
   function renderWithClickableCitations(content: React.ReactNode, key: string): React.ReactNode {
@@ -125,8 +125,8 @@ export function FormattedAnswer({ text, onCitationClick }: { text: string; onCit
 
       return parts.map((part, idx) => {
         if (!part) return null;
-        // Check if this part matches the citation pattern
-        if (part.match(/^\(Document/i)) {
+        // Check if this part matches a citation pattern (has a file extension + page)
+        if (part.match(/\.(?:pdf|pptx|docx|doc|odt|html|ipynb|txt|md)/i) && part.match(/[Pp]age\s*\d+/)) {
           return (
             <span
               key={`${key}-cit-${idx}`}
@@ -202,14 +202,15 @@ export function FormattedAnswer({ text, onCitationClick }: { text: string; onCit
       continue;
     }
 
-    // Source/citation line
-    if (line.match(/^\s*\*?\(?Source:|^\s*\(\*Source:|^\s*\*\(Source:/i)) {
+    // Source/citation line — matches various citation formats from Gemini
+    // "Source:", "*Source:", "Source Document:", "**Source Document:**", etc.
+    if (line.match(/^\s*\*{0,2}\(?Source[^:]*:|^\s*\(\*Source/i)) {
       elements.push(renderCitation(line, i));
       continue;
     }
 
-    // Also detect inline citations like "[filename.pdf, Page 3]" or "Document: `filename.pdf`"
-    if (line.match(/^\s*\*?\(?Document:|^\s*\[.*\.(pdf|pptx|docx|doc).*[Pp]age/i)) {
+    // Also detect lines with "Document:" or lines that are primarily a file reference with page
+    if (line.match(/^\s*\*{0,2}\(?Document:|^\s*\[.*\.(?:pdf|pptx|docx|doc).*[Pp]age/i)) {
       elements.push(renderCitation(line, i));
       continue;
     }
