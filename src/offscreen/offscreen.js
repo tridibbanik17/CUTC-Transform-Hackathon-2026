@@ -1,7 +1,9 @@
 // Offscreen document for PDF.js text extraction
 // This runs in a full DOM context where PDF.js can operate properly
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.js';
+import * as pdfjsLib from './pdf.min.mjs';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = './pdf.worker.min.mjs';
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'PARSE_PDF') {
