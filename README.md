@@ -103,8 +103,8 @@ A Chrome extension that turns your course materials into an AI tutor — upload 
 │  │  citations  │         │  3. Gemini generates cited answer  │    │
 │  └──────────────┘         └───────────────────────────────────┘    │
 │                                                                     │
-│  WITHOUT Backboard: sends ALL 240k chars to Gemini (expensive)      │
-│  WITH Backboard: sends only ~3k relevant chars (50-100x cheaper)    │
+│  WITHOUT Backboard: sends up to 100k chars to Gemini per question   │
+│  WITH Backboard: sends only ~3-5k relevant chars (20-30x cheaper)   │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -132,7 +132,7 @@ The user's Gemini API key is passed through to Backboard.io, which makes Gemini 
 
 | Without Backboard | With Backboard |
 |---|---|
-| Sends ALL course text (240k+ chars) to Gemini per question | Sends only ~3k relevant chars per question |
+| Sends up to 100k chars of cached context to Gemini per question | Sends only ~3-5k relevant chars per question (20-30x less) |
 | Burns through free API quota in 10-20 questions | Hundreds of questions within free tier |
 | Hits Gemini's context window limit on large courses | Never hits limits — chunks are small |
 | Worse answers (model drowns in irrelevant content) | Better answers (model sees only relevant material) |

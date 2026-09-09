@@ -19,7 +19,7 @@ HOW IT WORKS:
 FEATURES:
 • Answers cite the exact source document, page number, and section
 • Upload entire courses — no file size limits or character caps
-• Supports 15+ file formats: PDF, PPTX, DOCX, DOC, ODT, HTML, Jupyter notebooks, plain text, source code, LaTeX, and more
+• Supports 15+ file formats including slides, documents, notebooks, and source code
 • Drag & drop files — upload one or many files by dropping them into the panel
 • Math renders cleanly with Unicode (no raw LaTeX clutter)
 • Dark mode and light mode
@@ -40,14 +40,13 @@ PRIVACY:
 • Your API key stays in your browser's local storage
 • Course materials are isolated — no cross-user access
 
-SUPPORTED FILE TYPES:
-PDF, PPTX, DOCX, DOC, ODT, HTML, Jupyter (.ipynb), TXT, Markdown, Python, Java, JavaScript, C++, C, CSS, CSV, MATLAB (.m), LaTeX (.tex)
-
 GETTING STARTED:
 1. Click the CourseChat icon in your toolbar to open the side panel
 2. Click the gear icon to paste your free Gemini API key (get one at aistudio.google.com/apikey)
 3. Upload your course files (click the Upload button or drag & drop files into the panel)
 4. Start asking questions!
+
+Open source: https://github.com/tridibbanik17/CUTC-Transform-Hackathon-2026
 
 Built by students, for students.
 
