@@ -288,6 +288,14 @@ function App() {
     });
   }, []);
 
+  // Auto-dismiss the upload success banner after ~4s (keep errors/cleared messages)
+  useEffect(() => {
+    if (indexResult && indexResult.startsWith('✓')) {
+      const t = window.setTimeout(() => setIndexResult(null), 4000);
+      return () => window.clearTimeout(t);
+    }
+  }, [indexResult]);
+
   // Load persisted state on mount
   useEffect(() => {
     sendMessage({ type: 'GET_API_KEY_STATUS' }).then((res) => {
@@ -844,7 +852,7 @@ function App() {
           )}
           <textarea
             style={{ width: '100%', padding: '10px 12px', border: `2px solid ${theme.borderLight}`, borderRadius: '10px', fontSize: '14px', minHeight: '48px', maxHeight: '200px', resize: 'none' as const, boxSizing: 'border-box' as const, transition: 'border-color 0.2s', outline: 'none', background: theme.inputBg, color: theme.text, overflow: 'auto' }}
-            placeholder="e.g. What are the deliverables for this week?"
+            placeholder="e.g. Explain this concept with an example"
             value={query} onChange={(e) => { setQuery(e.target.value); e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'; }} onKeyDown={handleKeyDown} maxLength={2000} disabled={queryLoading}
             onFocus={(e) => { e.currentTarget.style.borderColor = theme.accent; }}
             onBlur={(e) => { e.currentTarget.style.borderColor = theme.borderLight; }}
