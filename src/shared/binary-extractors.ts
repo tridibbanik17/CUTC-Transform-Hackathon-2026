@@ -123,7 +123,7 @@ async function decompressEntry(entry: ZipEntry): Promise<Uint8Array> {
     const writer = ds.writable.getWriter();
     const reader = ds.readable.getReader();
 
-    writer.write(entry.data);
+    writer.write(entry.data as Uint8Array<ArrayBuffer>);
     writer.close();
 
     const chunks: Uint8Array[] = [];

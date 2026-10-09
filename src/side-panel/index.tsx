@@ -577,7 +577,14 @@ function App() {
       `}</style>
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', paddingBottom: '12px', borderBottom: `2px solid ${theme.accent}` }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px',
+        padding: '12px 14px',
+        background: darkMode ? 'linear-gradient(135deg, #0b1b33, #111827)' : 'linear-gradient(135deg, #eff6ff, #faf5ff)',
+        border: `1px solid ${theme.border}`,
+        borderRadius: '12px',
+        boxShadow: `0 2px 8px ${theme.shadow}`,
+      }}>
         <img src="../icons/icon48.png" alt="CourseChat" style={{ width: '28px', height: '28px', borderRadius: '8px' }} />
         <span style={{ fontSize: '20px', fontWeight: 700, color: theme.accent }}>CourseChat</span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '6px' }}>
@@ -630,15 +637,58 @@ function App() {
         </div>
       </div>
 
-      {/* Platform Status — only show if no content uploaded */}
-      {!hasContent && (
+      {/* Platform Status — only show if a platform is detected and no content uploaded */}
+      {!hasContent && platform && (
         <div style={{ fontSize: '12px', color: theme.textMuted, marginBottom: '12px' }}>
-          {platform ? (
-            <span>🟢 <strong>{platform}</strong>{courseInfo && <> — {courseInfo.courseName}</>}</span>
-          ) : (
-            <span>Upload your course PDFs below to get started.</span>
-          )}
+          <span>🟢 <strong>{platform}</strong>{courseInfo && <> — {courseInfo.courseName}</>}</span>
         </div>
+      )}
+
+      {/* Hero / Value Proposition — first run only (no key, no content) */}
+      {!hasKey && !hasContent && (
+        <div style={{ marginBottom: '16px' }}>
+          <div style={{
+            background: darkMode ? 'linear-gradient(135deg, #0b1b33, #111827)' : 'linear-gradient(135deg, #eff6ff, #faf5ff)',
+            border: `1px solid ${theme.border}`,
+            borderRadius: '14px',
+            padding: '18px 16px',
+          }}>
+            <div style={{ fontSize: '17px', fontWeight: 700, color: theme.text, lineHeight: 1.3 }}>
+              Turn your course notes into an AI study tutor.
+            </div>
+            <p style={{ fontSize: '12.5px', lineHeight: 1.5, margin: '8px 0 14px', color: theme.textSecondary }}>
+              Upload lecture slides, PDFs, and readings, then ask anything. Every answer cites the exact file and page it came from.
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {[
+                { icon: '📎', label: 'Cites sources' },
+                { icon: '🧮', label: 'Math-aware' },
+                { icon: '🔒', label: 'Key stays local' },
+              ].map((chip) => (
+                <span key={chip.label} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '5px',
+                  background: theme.cardBg, color: theme.textSecondary,
+                  border: `1px solid ${theme.border}`, borderRadius: '999px',
+                  padding: '5px 11px', fontSize: '11.5px', fontWeight: 600,
+                  boxShadow: `0 1px 3px ${theme.shadow}`,
+                }}>
+                  <span aria-hidden="true">{chip.icon}</span>{chip.label}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* First-run nudge — one line, points at the open-settings action */}
+      {!hasKey && !showSettings && (
+        <button
+          type="button"
+          onClick={() => setShowSettings(true)}
+          style={{ width: '100%', marginBottom: '16px', padding: '11px 16px', background: theme.accent, color: '#fff', border: 'none', borderRadius: '10px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', boxShadow: `0 2px 6px ${theme.shadow}` }}
+        >
+          Add Gemini key to start →
+        </button>
       )}
 
       {/* Settings Panel — hidden by default */}
@@ -657,23 +707,15 @@ function App() {
             <div>
               <input style={{ width: '100%', padding: '9px 12px', border: `1px solid ${theme.borderLight}`, borderRadius: '8px', fontSize: '13px', boxSizing: 'border-box' as const, background: theme.inputBg, color: theme.text }} type="password" placeholder="Paste your Gemini API key..." value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
               <div style={{ marginTop: '8px' }}>
-                <button onClick={handleSaveKey} disabled={keyLoading || !apiKey.trim()} style={{ padding: '8px 16px', background: '#1a73e8', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', cursor: 'pointer', opacity: keyLoading || !apiKey.trim() ? 0.5 : 1 }}>
+                <button onClick={handleSaveKey} disabled={keyLoading || !apiKey.trim()} style={{ padding: '8px 16px', background: theme.accent, color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: keyLoading || !apiKey.trim() ? 'not-allowed' : 'pointer', opacity: keyLoading ? 0.6 : (!apiKey.trim() ? 0.8 : 1) }}>
                   {keyLoading ? <><Spinner /> Validating...</> : 'Save Key'}
                 </button>
               </div>
               {keyError && <div style={{ color: '#d93025', fontSize: '12px', marginTop: '6px' }}>{keyError}</div>}
               {keySuccess && <div style={{ color: '#188038', fontSize: '12px', marginTop: '6px' }}>{keySuccess}</div>}
-              <div style={{ fontSize: '11px', color: '#888', marginTop: '8px' }}>Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style={{ color: '#1a73e8' }}>Google AI Studio</a></div>
+              <div style={{ fontSize: '11px', color: theme.textMuted, marginTop: '8px' }}>Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style={{ color: theme.accent, fontWeight: 600, textDecoration: 'underline' }}>Google AI Studio</a></div>
             </div>
           )}
-        </div>
-      )}
-
-      {/* Onboarding */}
-      {!hasKey && !showSettings && (
-        <div style={{ marginBottom: '16px', background: theme.warningBg, padding: '14px', borderRadius: '10px', border: `1px solid ${darkMode ? '#5a5020' : '#fdd835'}` }}>
-          <strong style={{ fontSize: '14px' }}>Welcome to CourseChat!</strong>
-          <p style={{ fontSize: '12px', margin: '6px 0 0', color: theme.textSecondary }}>Click the ⚙️ gear icon above to add your free Gemini API key and start asking questions.</p>
         </div>
       )}
 
@@ -775,6 +817,31 @@ function App() {
       {hasKey && (
         <div style={{ marginBottom: '16px' }}>
           <label style={{ fontSize: '12px', fontWeight: 600, color: theme.textSecondary, display: 'block', marginBottom: '6px' }}>Ask a question about your course.</label>
+
+          {/* Starter prompts — only before the first question, once files exist */}
+          {hasContent && answers.length === 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+              {[
+                'Summarize the key concepts',
+                'Give me 3 practice problems with solutions',
+                "What's most likely to be on the exam?",
+              ].map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setQuery(p)}
+                  style={{
+                    fontSize: '11.5px', color: theme.textSecondary, background: theme.cardBg,
+                    border: `1px solid ${theme.border}`, borderRadius: '999px',
+                    padding: '6px 11px', cursor: 'pointer', fontWeight: 500,
+                  }}
+                  title="Click to use this prompt"
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          )}
           <textarea
             style={{ width: '100%', padding: '10px 12px', border: `2px solid ${theme.borderLight}`, borderRadius: '10px', fontSize: '14px', minHeight: '48px', maxHeight: '200px', resize: 'none' as const, boxSizing: 'border-box' as const, transition: 'border-color 0.2s', outline: 'none', background: theme.inputBg, color: theme.text, overflow: 'auto' }}
             placeholder="e.g. What are the deliverables for this week?"
